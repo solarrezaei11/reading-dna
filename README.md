@@ -22,16 +22,16 @@ Built to explore a question I work with daily as a TPM on AI evaluation at Micro
 
 ## Why Cerebras
 
-The standard assumption is that bigger models are slower. Cerebras breaks that.
+A 120-billion-parameter model typically takes several seconds to respond — GPU infrastructure has to move enormous amounts of weight across memory on every token. Cerebras' wafer-scale chip is built differently: the entire model fits on a single chip, eliminating the memory bottleneck.
 
-**GPT-OSS 120B on Cerebras: ~1 second end-to-end.** That's a 120-billion-parameter open-source model — larger than most things you'd run through an API — responding faster than GPT-4o on a typical connection.
+The result: **GPT-OSS 120B responds in ~1 second.** Same model you'd run on a GPU cluster and wait for — instant on Cerebras.
 
 | Model | Parameters | Latency (demo run) | Unique picks |
 |---|---|---|---|
 | GPT-OSS 120B (Cerebras) | 120B dense | **1,047 ms** | 5 |
 | GLM 4.7 (Cerebras) | 355B MoE (32B active) | 11,862 ms | 5 |
 
-Both models receive the same structured reading profile. GLM 4.7 is technically the larger model by parameter count — yet GPT-OSS 120B responds 11× faster. The latency difference comes from architecture and chip optimization, not prompt complexity. At ~1 second for a 120B dense model, the user experience is indistinguishable from a lightweight API — which changes what's possible in real-time AI products.
+Both models use Cerebras hardware. GPT-OSS is a dense model (all 120B parameters active on every token) — exactly the workload Cerebras is optimized for. At ~1 second, it's fast enough to feel like a lightweight API call, which is what made it the right choice for the main reasoning model here.
 
 ---
 
