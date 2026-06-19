@@ -2,7 +2,21 @@
 
 Import your Goodreads history, get a taste profile, then watch two AI models battle to recommend your next book.
 
-**[GPT-OSS 120B](https://cloud.cerebras.ai) vs [GLM 4.7](https://cloud.cerebras.ai)** — both running on Cerebras hardware. You see who knows you better.
+**GPT-OSS 120B vs GLM 4.7** — both running on Cerebras hardware. You see who knows you better.
+
+---
+
+<p align="center">
+  <img src="public/screenshots/01_landing.png" alt="Landing page" width="49%" />
+  <img src="public/screenshots/02_dna_profile.png" alt="Reading DNA profile" width="49%" />
+</p>
+<p align="center">
+  <img src="public/screenshots/03_map.png" alt="Reading Universe Map with AI recommendations" width="98%" />
+</p>
+
+*Demo run on [Emily May's](https://www.goodreads.com/user/show/4622890-emily-may) public Goodreads profile — 197 books, archetype: **The Darkly Curious Intellectual**.*
+
+---
 
 ## What it does
 
