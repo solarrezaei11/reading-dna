@@ -28,10 +28,10 @@ The standard assumption is that bigger models are slower. Cerebras breaks that.
 
 | Model | Parameters | Latency (demo run) | Unique picks |
 |---|---|---|---|
-| GPT-OSS 120B (Cerebras) | 120B | **1,047 ms** | 5 |
-| GLM 4.7 (Cerebras) | — | 11,862 ms | 5 |
+| GPT-OSS 120B (Cerebras) | 120B dense | **1,047 ms** | 5 |
+| GLM 4.7 (Cerebras) | 355B MoE (32B active) | 11,862 ms | 5 |
 
-Both models receive the same structured reading profile. The latency difference comes from architecture and chip, not prompt complexity. At ~1 second for a 120B model, the user experience is indistinguishable from a lightweight API — which changes what's possible in real-time AI products.
+Both models receive the same structured reading profile. GLM 4.7 is technically the larger model by parameter count — yet GPT-OSS 120B responds 11× faster. The latency difference comes from architecture and chip optimization, not prompt complexity. At ~1 second for a 120B dense model, the user experience is indistinguishable from a lightweight API — which changes what's possible in real-time AI products.
 
 ---
 
