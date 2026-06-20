@@ -19,6 +19,7 @@ export default function AnalyzePage() {
   const [step, setStep] = useState<Step>("dna");
   const [dna, setDna] = useState<any>(null);
   const [battle, setBattle] = useState<any>(null);
+  const [judgeData, setJudgeData] = useState<any>(null);
   const [mapData, setMapData] = useState<any>(null);
   const [libbyData, setLibbyData] = useState<any>(null);
   const [error, setError] = useState("");
@@ -60,6 +61,13 @@ export default function AnalyzePage() {
       if (!battleRes.ok) throw new Error("LLM battle failed");
       const battleData = await battleRes.json();
       setBattle(battleData);
+
+      // Judge — fire and forget, loads separately (Ollama is local/slow)
+      fetch(`${API}/judge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dna_profile: dnaData, battle_results: battleData }),
+      }).then(r => r.ok ? r.json() : null).then(j => { if (j) setJudgeData(j); }).catch(() => {});
 
       // Check Libby if library provided
       if (lib) {
@@ -152,7 +160,7 @@ export default function AnalyzePage() {
       {/* Unified Map + Battle — inline loading */}
       {dna && (
         mapData && battle ? (
-          <UnifiedMap mapData={mapData} battle={battle} libbyData={libbyData} library={library} />
+          <UnifiedMap mapData={mapData} battle={{ ...battle, ...(judgeData ?? {}) }} libbyData={libbyData} library={library} />
         ) : (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-zinc-300">Reading Universe</h2>

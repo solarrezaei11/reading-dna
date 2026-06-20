@@ -8,7 +8,7 @@ import httpx
 
 from parsers import parse_csv, parse_rss
 from dna import build_dna_profile
-from llm_battle import run_battle
+from llm_battle import run_battle, run_judge
 from embeddings import generate_embeddings_and_umap
 from libby import check_availability
 
@@ -34,6 +34,10 @@ class BattleRequest(BaseModel):
 class EmbeddingsRequest(BaseModel):
     books: list[dict]
     recommendations: list[dict] = []
+
+class JudgeRequest(BaseModel):
+    dna_profile: dict
+    battle_results: dict
 
 class LibbyRequest(BaseModel):
     isbns: list[str]
@@ -69,6 +73,10 @@ async def build_dna(req: dict):
 async def llm_battle(req: BattleRequest):
     results = await run_battle(req.dna_profile, req.books, req.currently_reading, req.dnf)
     return results
+
+@app.post("/judge")
+async def judge_battle(req: JudgeRequest):
+    return await run_judge(req.dna_profile, req.battle_results)
 
 @app.post("/embeddings")
 async def get_embeddings(req: EmbeddingsRequest):

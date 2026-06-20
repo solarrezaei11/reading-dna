@@ -47,7 +47,17 @@ type Props = {
     genre_anchors: GenreAnchor[];
     rec_points: RecPoint[];
   };
-  battle: { models: Record<string, BattleModel> };
+  battle: {
+    models: Record<string, BattleModel>;
+    winner?: string | null;
+    judge?: Record<string, {
+      scores?: Record<string, number>;
+      verdict?: string;
+      latency_ms?: number;
+      model?: string;
+      error?: string;
+    }>;
+  };
   libbyData?: Record<string, { available: boolean; title: string; url: string }>;
   library?: string;
 };
@@ -590,6 +600,92 @@ export default function UnifiedMap({ mapData, battle, libbyData }: Props) {
           );
         })}
       </div>
+
+      {/* Judge's Verdict */}
+      {battle.judge && !("error" in battle.judge) && (() => {
+        const SCORE_LABELS: Record<string, string> = {
+          relevance: "Relevance",
+          reasoning_depth: "Reasoning depth",
+          novelty: "Novelty",
+          specificity: "Specificity",
+        };
+        const modelNames = Object.keys(battle.models);
+        const judgeModel = Object.values(battle.judge)[0]?.model ?? "qwen2.5:7b";
+
+        return (
+          <div className="mt-6 rounded-2xl border border-white/10 overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-3 border-b border-white/10" style={{ background: "#13131f" }}>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-mono text-zinc-500 tracking-widest uppercase">Judge</span>
+                <span className="text-xs text-zinc-400 bg-white/5 border border-white/10 px-2 py-0.5 rounded-full">{judgeModel} · local</span>
+              </div>
+              {battle.winner && (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-zinc-500">winner</span>
+                  <span className="font-semibold" style={{ color: MODEL_COLORS[battle.winner as keyof typeof MODEL_COLORS] ?? "#a855f7" }}>
+                    {battle.winner}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Score grid */}
+            <div className="grid grid-cols-2 divide-x divide-white/10" style={{ background: "#0d0d1c" }}>
+              {modelNames.map((name) => {
+                const j = battle.judge![name];
+                if (!j || j.error) return (
+                  <div key={name} className="p-5 text-xs text-red-400">{j?.error ?? "No verdict"}</div>
+                );
+                const color = MODEL_COLORS[name as keyof typeof MODEL_COLORS] ?? "#a855f7";
+                const scores = j.scores ?? {};
+                const avg = Object.values(scores).length
+                  ? (Object.values(scores).reduce((a, b) => a + b, 0) / Object.values(scores).length).toFixed(1)
+                  : null;
+                const isWinner = battle.winner === name;
+
+                return (
+                  <div key={name} className="p-5 space-y-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-semibold" style={{ color }}>{name}</span>
+                      {avg && (
+                        <span className={`text-sm font-bold font-mono ${isWinner ? "" : "text-zinc-400"}`} style={isWinner ? { color } : {}}>
+                          {avg}<span className="text-zinc-600 text-xs">/10</span>
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Score bars */}
+                    <div className="space-y-2">
+                      {Object.entries(SCORE_LABELS).map(([key, label]) => {
+                        const val = scores[key] ?? 0;
+                        return (
+                          <div key={key}>
+                            <div className="flex justify-between text-[10px] text-zinc-500 mb-1">
+                              <span>{label}</span>
+                              <span className="font-mono text-zinc-300">{val}/10</span>
+                            </div>
+                            <div className="h-1 bg-white/10 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-700"
+                                style={{ width: `${val * 10}%`, background: color, opacity: isWinner ? 1 : 0.5 }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    {j.verdict && (
+                      <p className="text-[11px] text-zinc-400 leading-relaxed border-t border-white/5 pt-3">{j.verdict}</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
     </section>
   );
 }

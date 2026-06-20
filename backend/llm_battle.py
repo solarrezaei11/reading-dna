@@ -2,6 +2,7 @@ import os
 import json
 import asyncio
 import time
+import httpx
 from cerebras.cloud.sdk import AsyncCerebras
 
 client = AsyncCerebras(api_key=os.environ.get("CEREBRAS_API_KEY"))
@@ -114,6 +115,63 @@ async def call_model(model: str, prompt: str) -> dict:
     return data
 
 
+def build_judge_prompt(dna: dict, recs: list[dict], opponent_name: str) -> str:
+    rec_text = "\n".join(
+        f"{i+1}. \"{r['title']}\" by {r['author']}\n   Reasoning: {r.get('why', 'No reasoning provided')}"
+        for i, r in enumerate(recs)
+    )
+    return f"""You are an expert literary critic and AI evaluation researcher judging book recommendations.
+
+The reader's profile:
+- Archetype: {dna.get('reader_archetype')}
+- Taste summary: {dna.get('taste_summary')}
+- Top themes: {', '.join(dna.get('top_themes', []))}
+- Themes to avoid: {', '.join(dna.get('avoid_themes', []))}
+- Prose density: {dna.get('taste_dimensions', {}).get('prose_density')}/10
+- Pacing: {dna.get('taste_dimensions', {}).get('pacing_preference')}/10
+- Intellectual depth: {dna.get('taste_dimensions', {}).get('intellectual_depth')}/10
+
+{opponent_name} recommended these 5 books:
+{rec_text}
+
+Score this recommender on each dimension from 0-10, then write a 2-sentence verdict.
+
+Return ONLY valid JSON:
+{{
+  "scores": {{
+    "relevance": <0-10, how well picks match this reader's DNA>,
+    "reasoning_depth": <0-10, how specific/insightful the reasoning is vs generic>,
+    "novelty": <0-10, how surprising the picks are vs obvious choices>,
+    "specificity": <0-10, how tied reasoning is to THIS reader vs boilerplate>
+  }},
+  "verdict": "<2 sentences on the overall quality of these recommendations and reasoning>"
+}}"""
+
+
+async def call_ollama_judge(prompt: str, model: str = "qwen2.5:7b") -> dict:
+    t0 = time.time()
+    async with httpx.AsyncClient(timeout=300) as client:
+        resp = await client.post(
+            "http://localhost:11434/api/chat",
+            json={
+                "model": model,
+                "messages": [
+                    {"role": "system", "content": "You are an expert evaluator. Always respond with valid JSON only."},
+                    {"role": "user", "content": prompt},
+                ],
+                "stream": False,
+                "format": "json",
+            },
+        )
+        resp.raise_for_status()
+    latency_ms = round((time.time() - t0) * 1000)
+    text = resp.json()["message"]["content"].strip()
+    data = json.loads(text)
+    data["_judge_latency_ms"] = latency_ms
+    data["_judge_model"] = model
+    return data
+
+
 async def run_battle(dna: dict, books: list[dict], currently_reading: list[dict] = [], dnf: list[dict] = []) -> dict:
     prompt = build_battle_prompt(dna, books, currently_reading, dnf)
 
@@ -141,4 +199,33 @@ async def run_battle(dna: dict, books: list[dict], currently_reading: list[dict]
                 "info": info,
             }
 
-    return {"models": results, "winner": None, "rubric": RUBRIC}
+    return {"models": results, "rubric": RUBRIC}
+
+
+async def run_judge(dna: dict, battle_results: dict) -> dict:
+    """Cross-evaluate both models' recommendations using Qwen 2.5 7B locally."""
+    gpt_recs = battle_results.get("models", {}).get("GPT-OSS 120B", {}).get("recommendations", [])
+    glm_recs = battle_results.get("models", {}).get("GLM 4.7", {}).get("recommendations", [])
+
+    judge_results: dict = {}
+    try:
+        # Sequential — Ollama is single-threaded locally; parallel calls just queue anyway
+        gpt_verdict = await call_ollama_judge(build_judge_prompt(dna, gpt_recs, "GPT-OSS 120B"))
+        glm_verdict = await call_ollama_judge(build_judge_prompt(dna, glm_recs, "GLM 4.7"))
+
+        for name, verdict in [("GPT-OSS 120B", gpt_verdict), ("GLM 4.7", glm_verdict)]:  # type: ignore[assignment]
+            if isinstance(verdict, Exception):
+                judge_results[name] = {"error": str(verdict)}
+            else:
+                latency = verdict.pop("_judge_latency_ms", None)
+                model = verdict.pop("_judge_model", None)
+                judge_results[name] = {**verdict, "latency_ms": latency, "model": model}
+
+        def avg_score(name: str) -> float:
+            s = judge_results.get(name, {}).get("scores", {})
+            return sum(s.values()) / len(s) if s else 0
+
+        winner = max(["GPT-OSS 120B", "GLM 4.7"], key=avg_score)
+        return {"judge": judge_results, "winner": winner}
+    except Exception as e:
+        return {"judge": {"error": str(e)}, "winner": None}
