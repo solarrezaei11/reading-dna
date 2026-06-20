@@ -26,12 +26,12 @@ A 120-billion-parameter model typically takes several seconds to respond — GPU
 
 The result: **GPT-OSS 120B responds in ~1 second.** Same model you'd run on a GPU cluster and wait for — instant on Cerebras.
 
-| Model | Parameters | Latency (demo run) | Unique picks |
-|---|---|---|---|
-| GPT-OSS 120B (Cerebras) | 120B dense | **1,047 ms** | 5 |
-| GLM 4.7 (Cerebras) | 355B MoE (32B active) | 11,862 ms | 5 |
+| Model | Parameters | TTFT | Generation | Total |
+|---|---|---|---|---|
+| GPT-OSS 120B (Cerebras) | 120B dense | **207 ms** | 1,140 ms | 1,347 ms |
+| GLM 4.7 (Cerebras) | 355B MoE (32B active) | **206 ms** | 11,553 ms | 11,759 ms |
 
-Both models use Cerebras hardware. GPT-OSS is a dense model (all 120B parameters active on every token) — exactly the workload Cerebras is optimized for. At ~1 second, it's fast enough to feel like a lightweight API call, which is what made it the right choice for the main reasoning model here.
+Both models start responding in ~200ms — same Cerebras infrastructure, same network. The difference is generation speed: GPT-OSS 120B, a fully dense model, completes in 1.1 seconds. GLM 4.7, despite having only 32B active parameters per token (MoE), takes 11.5 seconds to generate. Cerebras' wafer-scale chip is specifically optimized for dense transformer workloads — that's where the 10× generation speedup comes from.
 
 ---
 

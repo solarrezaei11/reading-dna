@@ -36,7 +36,7 @@ type DedupedRec = RecPoint & { isConsensus: boolean };
 
 type BattleModel = {
   recommendations: any[];
-  meta: { latency_ms: number; prompt_tokens: number; completion_tokens: number } | null;
+  meta: { latency_ms: number; ttft_ms: number | null; generation_ms: number | null; prompt_tokens: number; completion_tokens: number } | null;
   info: { display: string; description: string };
   error?: string;
 };
@@ -543,9 +543,21 @@ export default function UnifiedMap({ mapData, battle, libbyData }: Props) {
               <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]">
                 {m.meta && (
                   <>
-                    <div>
-                      <span className="font-mono font-bold" style={{ color }}>{m.meta.latency_ms.toLocaleString()}</span>
-                      <span className="text-zinc-500 ml-1">ms</span>
+                    {m.meta.ttft_ms != null && (
+                      <div title="Time to first token">
+                        <span className="font-mono font-bold" style={{ color }}>{m.meta.ttft_ms.toLocaleString()}</span>
+                        <span className="text-zinc-500 ml-1">ms TTFT</span>
+                      </div>
+                    )}
+                    {m.meta.generation_ms != null && (
+                      <div title="Generation time (after first token)">
+                        <span className="font-mono font-bold text-zinc-300">{m.meta.generation_ms.toLocaleString()}</span>
+                        <span className="text-zinc-500 ml-1">ms gen</span>
+                      </div>
+                    )}
+                    <div title="Total latency">
+                      <span className="font-mono font-bold text-zinc-500">{m.meta.latency_ms.toLocaleString()}</span>
+                      <span className="text-zinc-500 ml-1">ms total</span>
                     </div>
                     {m.meta.prompt_tokens != null && (
                       <div>

@@ -69,25 +69,47 @@ Include at least 1 comfort_zone=false pick."""
 
 async def call_model(model: str, prompt: str) -> dict:
     t0 = time.time()
-    resp = await client.chat.completions.create(
+    ttft: float | None = None
+    chunks: list[str] = []
+    prompt_tokens = completion_tokens = None
+
+    stream = await client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": "You are a book recommendation expert. Always respond with valid JSON only, no markdown."},
             {"role": "user", "content": prompt},
         ],
         temperature=0.8,
+        stream=True,
     )
-    latency_ms = round((time.time() - t0) * 1000)
-    text = resp.choices[0].message.content.strip()
+
+    async for chunk in stream:
+        if ttft is None:
+            ttft = time.time()
+        delta = chunk.choices[0].delta.content if chunk.choices else None
+        if delta:
+            chunks.append(delta)
+        if chunk.usage:
+            prompt_tokens = chunk.usage.prompt_tokens
+            completion_tokens = chunk.usage.completion_tokens
+
+    t_end = time.time()
+    ttft_ms = round((ttft - t0) * 1000) if ttft else None
+    generation_ms = round((t_end - ttft) * 1000) if ttft else None
+    total_ms = round((t_end - t0) * 1000)
+
+    text = "".join(chunks).strip()
     if text.startswith("```"):
         text = text.split("```")[1]
         if text.startswith("json"):
             text = text[4:]
     data = json.loads(text.strip())
     data["_meta"] = {
-        "latency_ms": latency_ms,
-        "prompt_tokens": resp.usage.prompt_tokens if resp.usage else None,
-        "completion_tokens": resp.usage.completion_tokens if resp.usage else None,
+        "latency_ms": total_ms,
+        "ttft_ms": ttft_ms,
+        "generation_ms": generation_ms,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
     }
     return data
 
