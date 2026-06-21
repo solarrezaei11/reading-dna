@@ -64,20 +64,7 @@ export default function AnalyzePage() {
       const battleData = await battleRes.json();
       setBattle(battleData);
 
-      // Judge — fires async so it doesn't block map loading (Ollama is local/slow ~2min)
-      setJudgeLoading(true);
-      const judgeController = new AbortController();
-      const judgeTimeout = setTimeout(() => judgeController.abort(), 5 * 60 * 1000);
-      fetch(`${API}/judge`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dna_profile: dnaData, battle_results: battleData }),
-        signal: judgeController.signal,
-      })
-        .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
-        .then(j => { setJudgeData(j); setJudgeLoading(false); })
-        .catch(e => { setJudgeError(e?.name === "AbortError" ? "Timed out" : String(e)); setJudgeLoading(false); })
-        .finally(() => clearTimeout(judgeTimeout));
+      // Judge is opt-in — triggered via runJudge() below
 
       // Check Libby if library provided
       if (lib) {
@@ -120,12 +107,39 @@ export default function AnalyzePage() {
     }
   }
 
+  async function runJudge() {
+    if (!dna || !battle || judgeLoading || judgeData) return;
+    setJudgeLoading(true);
+    setJudgeError("");
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5 * 60 * 1000);
+    try {
+      const res = await fetch(`${API}/judge`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dna_profile: dna, battle_results: battle }),
+        signal: controller.signal,
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      setJudgeData(await res.json());
+    } catch (e: unknown) {
+      setJudgeError(e instanceof Error && e.name === "AbortError" ? "Timed out after 5 min" : String(e));
+    } finally {
+      clearTimeout(timeout);
+      setJudgeLoading(false);
+    }
+  }
+
   if (error) {
     return (
       <main className="min-h-screen flex items-center justify-center">
         <div className="text-center space-y-4">
-          <p className="text-red-400">{error}</p>
-          <button onClick={() => router.push("/")} className="text-sm text-zinc-400 hover:text-white underline">
+          <p className="text-sm" style={{ color: "var(--rust)" }}>{error}</p>
+          <button
+            onClick={() => router.push("/")}
+            className="text-sm underline transition-colors"
+            style={{ color: "var(--text-3)" }}
+          >
             Go back
           </button>
         </div>
@@ -133,24 +147,29 @@ export default function AnalyzePage() {
     );
   }
 
+  const spinnerStyle: React.CSSProperties = {
+    borderColor: "var(--sage) transparent var(--sage) var(--sage)",
+  };
+
   return (
     <main className="min-h-screen px-4 py-12 max-w-5xl mx-auto space-y-12">
 
       {/* Header */}
       <div className="text-center space-y-2">
-        <h1 className="text-3xl font-bold">
-          Reading<span className="text-purple-400">DNA</span>
+        <h1 className="text-3xl tracking-tight">
+          <span className="font-light" style={{ color: "var(--text-1)" }}>Reading</span>
+          <span style={{ fontFamily: "var(--font-dm-serif)", color: "var(--sage)", fontStyle: "italic" }}>DNA</span>
         </h1>
-        <div className="flex items-center justify-center gap-3 text-sm text-zinc-500">
-          <span><span className="text-zinc-300 font-medium">{books.length}</span> read</span>
-          {currentlyReadingCount > 0 && <><span className="text-zinc-700">·</span><span><span className="text-zinc-300 font-medium">{currentlyReadingCount}</span> reading now</span></>}
-          {dnfCount > 0 && <><span className="text-zinc-700">·</span><span><span className="text-zinc-300 font-medium">{dnfCount}</span> did not finish</span></>}
-          <span className="text-zinc-700">·</span>
-          <span><span className="text-zinc-300 font-medium">{books.length + currentlyReadingCount + dnfCount}</span> total</span>
+        <div className="flex items-center justify-center gap-3 text-sm" style={{ color: "var(--text-3)" }}>
+          <span><span className="font-medium" style={{ color: "var(--text-1)" }}>{books.length}</span> read</span>
+          {currentlyReadingCount > 0 && <><span style={{ color: "var(--border-mid)" }}>·</span><span><span className="font-medium" style={{ color: "var(--text-1)" }}>{currentlyReadingCount}</span> reading now</span></>}
+          {dnfCount > 0 && <><span style={{ color: "var(--border-mid)" }}>·</span><span><span className="font-medium" style={{ color: "var(--text-1)" }}>{dnfCount}</span> did not finish</span></>}
+          <span style={{ color: "var(--border-mid)" }}>·</span>
+          <span><span className="font-medium" style={{ color: "var(--text-1)" }}>{books.length + currentlyReadingCount + dnfCount}</span> total</span>
         </div>
       </div>
 
-      {/* DNA Profile + Share Card — inline loading */}
+      {/* DNA Profile + Share Card */}
       {dna ? (
         <div className="flex flex-col lg:flex-row gap-8 items-start">
           <div className="flex-1 min-w-0">
@@ -161,28 +180,44 @@ export default function AnalyzePage() {
           </div>
         </div>
       ) : (
-        <div className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-2xl p-8">
-          <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin shrink-0" />
-          <span className="text-zinc-400 text-sm">Building your Reading DNA...</span>
+        <div
+          className="flex items-center gap-3 rounded-2xl p-8"
+          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
+        >
+          <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin shrink-0" style={spinnerStyle} />
+          <span className="text-sm" style={{ color: "var(--text-2)" }}>Building your Reading DNA…</span>
         </div>
       )}
 
-      {/* Unified Map + Battle — inline loading */}
+      {/* Map + Battle */}
       {dna && (
         mapData && battle ? (
-          <UnifiedMap mapData={mapData} battle={{ ...battle, ...(judgeData ?? {}) }} libbyData={libbyData} library={library} judgeLoading={judgeLoading} judgeError={judgeError} />
+          <UnifiedMap
+            mapData={mapData}
+            battle={{ ...battle, ...(judgeData ?? {}) }}
+            libbyData={libbyData}
+            library={library}
+            judgeLoading={judgeLoading}
+            judgeError={judgeError}
+            onRunJudge={runJudge}
+          />
         ) : (
           <div className="space-y-4">
-            <h2 className="text-lg font-semibold text-zinc-300">Reading Universe</h2>
+            <h2
+              className="text-xl font-light tracking-tight"
+              style={{ fontFamily: "var(--font-dm-serif)", color: "var(--text-1)", fontStyle: "italic" }}
+            >
+              Reading Universe
+            </h2>
             <div
               className="rounded-2xl p-8 flex items-center gap-3"
-              style={{ background: "rgba(255,255,255,0.025)", border: "1px solid rgba(255,255,255,0.08)" }}
+              style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
             >
-              <div className="w-5 h-5 border-2 border-purple-400 border-t-transparent rounded-full animate-spin shrink-0" />
-              <span className="text-zinc-400 text-sm">
+              <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin shrink-0" style={spinnerStyle} />
+              <span className="text-sm" style={{ color: "var(--text-2)" }}>
                 {step === "battle"
-                  ? "Running LLM battle — two models are picking books for you..."
-                  : "Mapping your reading universe..."}
+                  ? "Running AI model battle — two models are picking books for you…"
+                  : "Mapping your reading universe…"}
               </span>
             </div>
           </div>

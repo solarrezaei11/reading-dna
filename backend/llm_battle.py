@@ -80,7 +80,7 @@ async def call_model(model: str, prompt: str) -> dict:
             {"role": "system", "content": "You are a book recommendation expert. Always respond with valid JSON only, no markdown."},
             {"role": "user", "content": prompt},
         ],
-        temperature=0.8,
+        temperature=0,
         stream=True,
     )
 

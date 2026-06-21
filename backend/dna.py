@@ -75,7 +75,7 @@ blind_spot_genres are genres that critically acclaimed readers with similar tast
             {"role": "system", "content": "You are a literary analyst. Always respond with valid JSON only, no markdown."},
             {"role": "user", "content": prompt},
         ],
-        temperature=0.7,
+        temperature=0,
     )
     text = resp.choices[0].message.content.strip()
     if text.startswith("```"):

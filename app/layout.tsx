@@ -1,19 +1,22 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, DM_Serif_Display } from "next/font/google";
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const dmSerif = DM_Serif_Display({ weight: "400", variable: "--font-dm-serif", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "ReadingDNA — Which AI knows you best as a reader?",
-  description: "Upload your Goodreads history and watch GPT-4o, Gemini, and Llama compete to know your taste.",
+  description: "Import your Goodreads history. We build your taste profile, then two AI models compete to recommend books — and you see who knows you better.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}>
-      <body className="min-h-full flex flex-col bg-[#0a0a0f] text-white">{children}</body>
+    <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${dmSerif.variable} h-full antialiased`}>
+      <body className="min-h-full flex flex-col" style={{ background: "var(--bg)", color: "var(--text-1)" }}>
+        {children}
+      </body>
     </html>
   );
 }
