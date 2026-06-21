@@ -428,8 +428,8 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
                     <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
                       {prompt_tokens != null && <div><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{prompt_tokens.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>prompt tkns</span></div>}
                       {completion_tokens != null && <div><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{completion_tokens.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>output tkns</span></div>}
-                      {tokPerRec != null && <div title="avg tokens per recommendation"><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{tokPerRec}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>tkns/rec</span></div>}
-                      {tokPerSec != null && <div title="decode throughput"><span className="font-mono font-semibold" style={{ color }}>{tokPerSec.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>tok/s</span></div>}
+                      {tokPerRec != null && <div title="average output tokens per recommendation — higher = more verbose"><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{tokPerRec}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>tokens/rec</span></div>}
+                      {tokPerSec != null && <div title="decode speed — tokens generated per second"><span className="font-mono font-semibold" style={{ color }}>{tokPerSec.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>tokens/sec</span></div>}
                     </div>
                   </div>
                 );
