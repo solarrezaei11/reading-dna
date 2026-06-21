@@ -10,11 +10,19 @@ client = AsyncCerebras(api_key=os.environ.get("CEREBRAS_API_KEY"))
 MODEL_INFO = {
     "gpt-oss-120b": {
         "display": "GPT-OSS 120B",
-        "description": "Open-source 120B parameter model via Cerebras wafer-scale chip. Broad knowledge, strong reasoning.",
+        "description": "Reasoning model — MoE architecture, 117B total / 5.1B active parameters per token, 128 experts. Designed for chain-of-thought tasks (math, code, science). High TTFT reflects internal reasoning chain, not slowness.",
+        "architecture": "MoE",
+        "total_params": "117B",
+        "active_params": "5.1B",
+        "task_fit": "reasoning",
     },
     "zai-glm-4.7": {
         "display": "GLM 4.7",
-        "description": "ZhipuAI's GLM-4 series model. Strong multilingual and creative reasoning capabilities.",
+        "description": "ZhipuAI's GLM-4 series — MoE architecture, 355B total / 32B active parameters per token. Strong multilingual and agentic capabilities. Fast TTFT, optimized for interactive tasks.",
+        "architecture": "MoE",
+        "total_params": "355B",
+        "active_params": "32B",
+        "task_fit": "interactive",
     },
 }
 
@@ -71,7 +79,20 @@ Set comfort_zone to false for any pick that intentionally pushes them outside th
 Set hidden_gem to true for picks that are underseen — not on major bestseller lists, published more than 3 years ago, from a smaller press, or generally less talked-about online. These are more likely to be available at the library without a hold queue. Include at least 1 hidden_gem pick."""
 
 
-async def call_model(model: str, prompt: str) -> dict:
+async def call_model(model: str, prompt: str, retries: int = 3) -> dict:
+    for attempt in range(retries):
+        try:
+            return await _call_model_once(model, prompt)
+        except Exception as e:
+            if attempt == retries - 1:
+                raise
+            wait = 2 ** attempt  # 1s, 2s, 4s
+            print(f"[{model}] attempt {attempt+1} failed ({e}), retrying in {wait}s...")
+            await asyncio.sleep(wait)
+    raise RuntimeError("unreachable")
+
+
+async def _call_model_once(model: str, prompt: str) -> dict:
     t0 = time.time()
     ttft: float | None = None
     chunks: list[str] = []

@@ -445,6 +445,107 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
         })}
       </div>
 
+      {/* Dynamic performance insight panel */}
+      {(() => {
+        const entries = modelEntries.filter(([, m]) => m.meta);
+        if (entries.length < 2) return null;
+
+        const gptEntry = entries.find(([n]) => n.includes("GPT"));
+        const glmEntry = entries.find(([n]) => n.includes("GLM"));
+        if (!gptEntry || !glmEntry) return null;
+
+        const [gptName, gpt] = gptEntry;
+        const [glmName, glm] = glmEntry;
+        const gm = gpt.meta!; const lm = glm.meta!;
+
+        const gptTokSec = gm.completion_tokens && gm.generation_ms ? Math.round(gm.completion_tokens / (gm.generation_ms / 1000)) : null;
+        const glmTokSec = lm.completion_tokens && lm.generation_ms ? Math.round(lm.completion_tokens / (lm.generation_ms / 1000)) : null;
+        const gptTokRec = gm.completion_tokens ? Math.round(gm.completion_tokens / 5) : null;
+        const glmTokRec = lm.completion_tokens ? Math.round(lm.completion_tokens / 5) : null;
+
+        const insights: { label: string; text: string }[] = [];
+
+        // TTFT story
+        if (gm.ttft_ms && lm.ttft_ms) {
+          const ratio = gm.ttft_ms / lm.ttft_ms;
+          if (ratio > 2) {
+            insights.push({
+              label: "GPT-OSS long TTFT",
+              text: `GPT-OSS waited ${(gm.ttft_ms / 1000).toFixed(1)}s before its first token — ${ratio.toFixed(1)}× longer than GLM. This isn't Cerebras being slow: GPT-OSS is a reasoning model that runs an internal chain-of-thought before generating output. The long TTFT is the model thinking.`,
+            });
+          } else if (lm.ttft_ms / gm.ttft_ms > 2) {
+            insights.push({
+              label: "GLM long TTFT",
+              text: `GLM took ${(lm.ttft_ms / 1000).toFixed(1)}s to first token — ${(lm.ttft_ms / gm.ttft_ms).toFixed(1)}× slower than GPT-OSS off the mark.`,
+            });
+          } else {
+            insights.push({
+              label: "Similar TTFT",
+              text: `Both models had similar time-to-first-token (${gm.ttft_ms}ms vs ${lm.ttft_ms}ms) — neither was queued. Cerebras's wafer-scale chip delivers consistent first-token latency across both.`,
+            });
+          }
+        }
+
+        // Throughput story
+        if (gptTokSec && glmTokSec) {
+          const faster = gptTokSec > glmTokSec ? gptName : glmName;
+          const slowerTok = Math.min(gptTokSec, glmTokSec);
+          const fasterTok = Math.max(gptTokSec, glmTokSec);
+          const ratio = fasterTok / slowerTok;
+          insights.push({
+            label: "Decode throughput",
+            text: `Once past the first token, ${faster} decoded ${ratio.toFixed(1)}× faster (${fasterTok.toLocaleString()} vs ${slowerTok.toLocaleString()} tok/s). ${gptTokSec > glmTokSec ? "GPT-OSS's 5.1B active parameters per token — despite 117B total — means less computation per decode step." : "GLM's 32B active parameters make it lighter per step than its 355B total suggest."}`,
+          });
+        }
+
+        // Verbosity vs throughput
+        if (gptTokRec && glmTokRec) {
+          const diff = Math.abs(gptTokRec - glmTokRec);
+          const pct = diff / Math.min(gptTokRec, glmTokRec);
+          if (pct < 0.2) {
+            insights.push({
+              label: "Verbosity matched",
+              text: `Both models wrote similarly long recommendations (~${gptTokRec} vs ~${glmTokRec} tokens each), so the speed difference is pure throughput — not one model writing more.`,
+            });
+          } else {
+            const verbose = gptTokRec > glmTokRec ? gptName : glmName;
+            const terse = gptTokRec > glmTokRec ? glmName : gptName;
+            const vTok = Math.max(gptTokRec, glmTokRec);
+            const tTok = Math.min(gptTokRec, glmTokRec);
+            insights.push({
+              label: "Verbosity gap",
+              text: `${verbose} wrote ~${vTok} tokens per recommendation vs ${terse}'s ~${tTok}. Some of the generation time gap is ${verbose} being more verbose, not just slower.`,
+            });
+          }
+        }
+
+        // Architecture + task fit note
+        insights.push({
+          label: "Task fit",
+          text: `GPT-OSS is a reasoning model built for math and code (chain-of-thought tasks where a minute on GPU = 1 second on Cerebras). It's overbuilt for book recommendations. GLM 4.7 is optimised for interactive, agentic tasks — a closer match here. Model-task fit matters as much as raw speed.`,
+        });
+
+        return (
+          <div className="rounded-2xl p-5 space-y-4"
+            style={{ background: "var(--surface)", border: "1px solid var(--border-mid)", boxShadow: "0 1px 6px rgba(139,107,70,0.04)" }}>
+            <div className="text-[10px] tracking-[0.18em] uppercase font-medium" style={{ color: "var(--text-3)" }}>
+              What does this data mean?
+            </div>
+            <div className="space-y-3">
+              {insights.map(({ label, text }) => (
+                <div key={label} className="flex gap-3">
+                  <div className="mt-0.5 shrink-0 w-1.5 h-1.5 rounded-full" style={{ background: "var(--sage)", marginTop: 5 }} />
+                  <div>
+                    <span className="text-[11px] font-semibold" style={{ color: "var(--text-1)" }}>{label}. </span>
+                    <span className="text-[11px] leading-relaxed" style={{ color: "var(--text-2)" }}>{text}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Judge panel — opt-in */}
       {!battle.judge && !judgeLoading && (
         <div className="rounded-2xl flex items-center justify-between px-5 py-4"
