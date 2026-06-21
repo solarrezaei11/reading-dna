@@ -106,6 +106,11 @@ def parse_feed(xml_text: str, shelf: str) -> list[dict]:
         user_shelves_raw = (item.findtext(gr("user_shelves"), "") or "").strip()
         user_shelves = [s.strip().lower() for s in user_shelves_raw.split(",") if s.strip()]
 
+        # Review text — strip HTML tags
+        review_raw = (item.findtext(gr("user_review"), "") or "").strip()
+        review_text = re.sub(r"<[^>]+>", " ", review_raw)
+        review_text = re.sub(r"\s+", " ", review_text).strip()
+
         books.append({
             "title": title,
             "author": author,
@@ -117,7 +122,7 @@ def parse_feed(xml_text: str, shelf: str) -> list[dict]:
             "date_read": "",
             "year_read": None,
             "shelves": exclusive_shelf or shelf,
-            "my_review": "",
+            "my_review": review_text,
             "genres": [],
             # internal classification helpers (stripped before returning)
             "_exclusive_shelf": exclusive_shelf,
