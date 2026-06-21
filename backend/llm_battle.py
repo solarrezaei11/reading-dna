@@ -35,7 +35,7 @@ def build_battle_prompt(dna: dict, books: list[dict], currently_reading: list[di
 
     dnf_note = f"\nBooks they started but did NOT finish (do NOT recommend these — something didn't click):\n{', '.join(dnf_titles)}" if dnf_titles else ""
     cr_note = f"\nCurrently reading (do NOT recommend these — they already have them):\n{', '.join(cr_titles)}" if cr_titles else ""
-    tbr_note = f"\nAlready on their want-to-read list (do NOT recommend these — they already know about them):\n{', '.join(tbr_titles[:60])}" if tbr_titles else ""
+    tbr_note = f"\nAlready on their want-to-read list (do NOT recommend these — they already know about them):\n{', '.join(tbr_titles[:30])}" if tbr_titles else ""
 
     return f"""You are recommending books to a specific reader. Here is their Reading DNA profile:
 
@@ -49,7 +49,7 @@ Intellectual depth: {dna.get('taste_dimensions', {}).get('intellectual_depth')}/
 Fiction ratio: {(fr := int(dna.get('taste_dimensions', {}).get('fiction_ratio') or 50))}% — {"this reader is primarily a non-fiction reader; strongly prefer non-fiction recommendations" if fr < 40 else "this reader is primarily a fiction reader; strongly prefer fiction recommendations" if fr > 60 else "this reader reads a mix of fiction and non-fiction"}
 
 Books they've already read (do NOT recommend these):
-{', '.join(read_titles[:60])}{dnf_note}{cr_note}{tbr_note}
+{', '.join(read_titles[:50])}{dnf_note}{cr_note}{tbr_note}
 
 Recommend exactly 5 books. For each, explain specifically WHY it matches this reader's DNA.
 Return ONLY valid JSON, no markdown fences:
@@ -87,12 +87,16 @@ async def call_model(model: str, prompt: str) -> dict:
         stream=True,
     )
 
+    finish_reason = None
     async for chunk in stream:
         if ttft is None:
             ttft = time.time()
-        delta = chunk.choices[0].delta.content if chunk.choices else None
-        if delta:
-            chunks.append(delta)
+        if chunk.choices:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                chunks.append(delta)
+            if chunk.choices[0].finish_reason:
+                finish_reason = chunk.choices[0].finish_reason
         if chunk.usage:
             prompt_tokens = chunk.usage.prompt_tokens
             completion_tokens = chunk.usage.completion_tokens
@@ -103,6 +107,9 @@ async def call_model(model: str, prompt: str) -> dict:
     total_ms = round((t_end - t0) * 1000)
 
     text = "".join(chunks).strip()
+    if not text:
+        print(f"[{model}] Empty response. finish_reason={finish_reason}, chunks={len(chunks)}")
+        raise ValueError(f"{model} returned an empty response (finish_reason={finish_reason})")
     # Strip markdown fences
     if text.startswith("```"):
         text = text.split("```")[1]
