@@ -5,7 +5,7 @@ import * as d3 from "d3";
 
 type UserPoint   = { title: string; author: string; my_rating: number; cluster_id: number; cluster_name: string; x: number; y: number };
 type GenreAnchor = { name: string; x: number; y: number; explored: boolean };
-type RecPoint    = { title: string; author: string; year?: string; isbn?: string; why?: string; comfort_zone?: boolean; model_name?: string; x: number; y: number };
+type RecPoint    = { title: string; author: string; year?: string; isbn?: string; why?: string; comfort_zone?: boolean; on_tbr?: boolean; hidden_gem?: boolean; model_name?: string; x: number; y: number };
 type DedupedRec  = RecPoint & { isConsensus: boolean };
 type BattleModel = { recommendations: any[]; meta: { latency_ms: number; ttft_ms: number | null; generation_ms: number | null; prompt_tokens: number; completion_tokens: number } | null; info: { display: string; description: string }; error?: string };
 
@@ -152,7 +152,7 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
 
     // ── Recommendation diamonds ──
     dedupedRecs.forEach(r => {
-      const cx = xS(r.x); const cy = yS(r.y); const { isConsensus, model_name, comfort_zone } = r; const s = 8;
+      const cx = xS(r.x); const cy = yS(r.y); const { isConsensus, model_name, comfort_zone, on_tbr, hidden_gem } = r; const s = 8;
       let alpha = 1;
       if (activeModel) { if (isConsensus) alpha = 1; else if (model_name === activeModel) alpha = 1; else alpha = 0.07; }
       if (comfort_zone === false && alpha > 0.1) {
@@ -171,6 +171,24 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
           .attr("fill", color).attr("fill-opacity", alpha)
           .attr("stroke", comfort_zone === false ? color : "rgba(0,0,0,0.1)").attr("stroke-width", comfort_zone === false ? 1 : 0.5)
           .attr("filter", comfort_zone === false ? "url(#glow-sm)" : null).attr("pointer-events", "none");
+      }
+      // Dashed sage ring = already on TBR
+      if (on_tbr && alpha > 0.1) {
+        svg.append("circle").attr("cx", cx).attr("cy", cy).attr("r", s + 5)
+          .attr("fill", "none").attr("stroke", "#5a8a5a").attr("stroke-width", 1.5)
+          .attr("stroke-opacity", 0.6 * alpha).attr("stroke-dasharray", "3,2").attr("pointer-events", "none");
+      }
+      // Small star spark = hidden gem (likely no library hold)
+      if (hidden_gem && alpha > 0.1) {
+        const sparkColor = "#c4a050";
+        const sr = 4;
+        [[-sr, -sr], [sr, -sr], [sr, sr], [-sr, sr]].forEach(([dx, dy]) => {
+          svg.append("line")
+            .attr("x1", cx + dx * 0.4).attr("y1", cy + dy * 0.4)
+            .attr("x2", cx + dx).attr("y2", cy + dy)
+            .attr("stroke", sparkColor).attr("stroke-width", 1.2)
+            .attr("stroke-opacity", 0.85 * alpha).attr("pointer-events", "none");
+        });
       }
       svg.append("path").attr("d", `M${cx},${cy-s-5} L${cx+s+5},${cy} L${cx},${cy+s+5} L${cx-s-5},${cy}Z`)
         .attr("fill", "transparent").attr("cursor", alpha > 0.1 ? "pointer" : "default")
@@ -224,6 +242,17 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
           </span>
           outside comfort zone
         </span>
+        <span className="flex items-center gap-1.5">
+          <span className="relative inline-block w-3 h-3">
+            <span className="absolute inset-0 rounded-full" style={{ border: "1.5px dashed #5a8a5a" }} />
+            <span className="absolute inset-1 inline-block" style={{ background: MODEL_COLORS[modelNames[0]], clipPath: "polygon(50% 0%,100% 50%,50% 100%,0% 50%)" }} />
+          </span>
+          on your TBR
+        </span>
+        <span className="flex items-center gap-1.5" style={{ color: "#8a6c20" }}>
+          <span style={{ fontSize: 10 }}>✦</span>
+          hidden gem
+        </span>
       </div>
       <p className="text-[11px] -mt-1" style={{ color: "var(--text-3)" }}>
         Click a cluster to see its books · Click a model card to highlight its picks
@@ -259,6 +288,20 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
                     </div>
                     <div className="font-medium leading-snug" style={{ color: "var(--text-1)" }}>{r.title}</div>
                     <div className="mt-0.5" style={{ color: "var(--text-2)" }}>{r.author}</div>
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {r.on_tbr && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
+                          style={{ background: "rgba(90,138,90,0.12)", color: "var(--sage-dark)", border: "1px solid rgba(90,138,90,0.25)" }}>
+                          on your TBR
+                        </span>
+                      )}
+                      {r.hidden_gem && (
+                        <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
+                          style={{ background: "rgba(196,160,80,0.12)", color: "#8a6c20", border: "1px solid rgba(196,160,80,0.35)" }}>
+                          ✦ hidden gem · likely no holds
+                        </span>
+                      )}
+                    </div>
                     {r.why && <div className="mt-1.5 text-[10px] leading-snug" style={{ color: "var(--text-3)" }}>{r.why}</div>}
                   </>
                 );
@@ -368,6 +411,7 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
                 )}
                 <div><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{recCount}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>unique picks</span></div>
                 {consensusCount > 0 && <div><span className="font-mono font-semibold" style={{ color: BOTH_COLOR }}>{consensusCount}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>both agreed</span></div>}
+                {(() => { const gems = (m.recommendations || []).filter((r: any) => r.hidden_gem).length; return gems > 0 ? <div><span className="font-mono font-semibold" style={{ color: "#8a6c20" }}>{gems}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>hidden gem{gems > 1 ? "s" : ""}</span></div> : null; })()}
               </div>
               {m.error && <div className="text-[10px] mt-2" style={{ color: "var(--rust)" }}>Error: {m.error}</div>}
             </button>

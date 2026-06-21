@@ -30,6 +30,7 @@ class BattleRequest(BaseModel):
     books: list[dict]
     currently_reading: list[dict] = []
     dnf: list[dict] = []
+    want_to_read: list[dict] = []
 
 class EmbeddingsRequest(BaseModel):
     books: list[dict]
@@ -56,6 +57,7 @@ async def fetch_rss(req: RSSRequest):
         "books": result["books"],
         "currently_reading": result["currently_reading"],
         "dnf": result["dnf"],
+        "want_to_read": result["want_to_read"],
         "count": len(result["books"]),
     }
 
@@ -71,7 +73,7 @@ async def build_dna(req: dict):
 
 @app.post("/battle")
 async def llm_battle(req: BattleRequest):
-    results = await run_battle(req.dna_profile, req.books, req.currently_reading, req.dnf)
+    results = await run_battle(req.dna_profile, req.books, req.currently_reading, req.dnf, req.want_to_read)
     return results
 
 @app.post("/judge")

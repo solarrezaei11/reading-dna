@@ -27,14 +27,15 @@ RUBRIC = {
 }
 
 
-def build_battle_prompt(dna: dict, books: list[dict], currently_reading: list[dict] = [], dnf: list[dict] = []) -> str:
+def build_battle_prompt(dna: dict, books: list[dict], currently_reading: list[dict] = [], dnf: list[dict] = [], want_to_read: list[dict] = []) -> str:
     read_titles = [b["title"] for b in books[:100]]
     dnf_titles = [b["title"] for b in dnf]
     cr_titles = [b["title"] for b in currently_reading]
-    all_exclude = list(set(read_titles + dnf_titles + cr_titles))
+    tbr_titles = [b["title"] for b in want_to_read]
 
     dnf_note = f"\nBooks they started but did NOT finish (do NOT recommend these — something didn't click):\n{', '.join(dnf_titles)}" if dnf_titles else ""
     cr_note = f"\nCurrently reading (do NOT recommend these — they already have them):\n{', '.join(cr_titles)}" if cr_titles else ""
+    tbr_note = f"\nAlready on their want-to-read list (do NOT recommend these — they already know about them):\n{', '.join(tbr_titles[:60])}" if tbr_titles else ""
 
     return f"""You are recommending books to a specific reader. Here is their Reading DNA profile:
 
@@ -45,9 +46,10 @@ Themes to avoid: {', '.join(dna.get('avoid_themes', []))}
 Prose density preference: {dna.get('taste_dimensions', {}).get('prose_density')}/10
 Pacing preference: {dna.get('taste_dimensions', {}).get('pacing_preference')}/10
 Intellectual depth: {dna.get('taste_dimensions', {}).get('intellectual_depth')}/10
+Fiction ratio: {dna.get('taste_dimensions', {}).get('fiction_ratio', 50)}% — {"this reader is primarily a non-fiction reader; strongly prefer non-fiction recommendations" if dna.get('taste_dimensions', {}).get('fiction_ratio', 50) < 40 else "this reader is primarily a fiction reader; strongly prefer fiction recommendations" if dna.get('taste_dimensions', {}).get('fiction_ratio', 50) > 60 else "this reader reads a mix of fiction and non-fiction"}
 
 Books they've already read (do NOT recommend these):
-{', '.join(read_titles[:60])}{dnf_note}{cr_note}
+{', '.join(read_titles[:60])}{dnf_note}{cr_note}{tbr_note}
 
 Recommend exactly 5 books. For each, explain specifically WHY it matches this reader's DNA.
 Return ONLY valid JSON, no markdown fences:
@@ -59,13 +61,14 @@ Return ONLY valid JSON, no markdown fences:
       "year": "...",
       "isbn": "...",
       "why": "2-3 sentences specifically tied to this reader's taste profile",
-      "comfort_zone": true
+      "comfort_zone": true,
+      "hidden_gem": false
     }}
   ]
 }}
 
-Set comfort_zone to false for any pick that intentionally pushes them outside their usual taste.
-Include at least 1 comfort_zone=false pick."""
+Set comfort_zone to false for any pick that intentionally pushes them outside their usual taste. Include at least 1 comfort_zone=false pick.
+Set hidden_gem to true for picks that are underseen — not on major bestseller lists, published more than 3 years ago, from a smaller press, or generally less talked-about online. These are more likely to be available at the library without a hold queue. Include at least 1 hidden_gem pick."""
 
 
 async def call_model(model: str, prompt: str) -> dict:
@@ -172,8 +175,9 @@ async def call_ollama_judge(prompt: str, model: str = "qwen2.5:7b") -> dict:
     return data
 
 
-async def run_battle(dna: dict, books: list[dict], currently_reading: list[dict] = [], dnf: list[dict] = []) -> dict:
-    prompt = build_battle_prompt(dna, books, currently_reading, dnf)
+async def run_battle(dna: dict, books: list[dict], currently_reading: list[dict] = [], dnf: list[dict] = [], want_to_read: list[dict] = []) -> dict:
+    prompt = build_battle_prompt(dna, books, currently_reading, dnf, want_to_read)
+    tbr_titles_lower = {b["title"].lower().strip() for b in want_to_read}
 
     gpt_recs, glm_recs = await asyncio.gather(
         call_model("gpt-oss-120b", prompt),
@@ -193,8 +197,13 @@ async def run_battle(dna: dict, books: list[dict], currently_reading: list[dict]
             results[name] = {"error": str(recs), "recommendations": [], "meta": None, "info": info}
         else:
             meta = recs.pop("_meta", {})
+            raw_recs = recs.get("recommendations", [])
+            for r in raw_recs:
+                r["on_tbr"] = r.get("title", "").lower().strip() in tbr_titles_lower
+                if "hidden_gem" not in r:
+                    r["hidden_gem"] = False
             results[name] = {
-                "recommendations": recs.get("recommendations", []),
+                "recommendations": raw_recs,
                 "meta": meta,
                 "info": info,
             }

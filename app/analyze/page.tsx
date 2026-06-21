@@ -15,6 +15,7 @@ export default function AnalyzePage() {
   const [books, setBooks] = useState<any[]>([]);
   const [currentlyReadingCount, setCurrentlyReadingCount] = useState(0);
   const [dnfCount, setDnfCount] = useState(0);
+  const [wantToReadCount, setWantToReadCount] = useState(0);
   const [library, setLibrary] = useState("");
   const [step, setStep] = useState<Step>("dna");
   const [dna, setDna] = useState<any>(null);
@@ -33,14 +34,16 @@ export default function AnalyzePage() {
     const parsed = JSON.parse(stored);
     const currentlyReading = JSON.parse(sessionStorage.getItem("currently_reading") || "[]");
     const dnf = JSON.parse(sessionStorage.getItem("dnf") || "[]");
+    const wantToRead = JSON.parse(sessionStorage.getItem("want_to_read") || "[]");
     setBooks(parsed);
     setCurrentlyReadingCount(currentlyReading.length);
     setDnfCount(dnf.length);
+    setWantToReadCount(wantToRead.length);
     setLibrary(lib);
-    runPipeline(parsed, lib, currentlyReading, dnf);
+    runPipeline(parsed, lib, currentlyReading, dnf, wantToRead);
   }, []);
 
-  async function runPipeline(books: any[], lib: string, currentlyReading: any[] = [], dnf: any[] = []) {
+  async function runPipeline(books: any[], lib: string, currentlyReading: any[] = [], dnf: any[] = [], wantToRead: any[] = []) {
     try {
       // Step 1: DNA
       setStep("dna");
@@ -58,7 +61,7 @@ export default function AnalyzePage() {
       const battleRes = await fetch(`${API}/battle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dna_profile: dnaData, books, currently_reading: currentlyReading, dnf }),
+        body: JSON.stringify({ dna_profile: dnaData, books, currently_reading: currentlyReading, dnf, want_to_read: wantToRead }),
       });
       if (!battleRes.ok) throw new Error("LLM battle failed");
       const battleData = await battleRes.json();
@@ -164,6 +167,7 @@ export default function AnalyzePage() {
           <span><span className="font-medium" style={{ color: "var(--text-1)" }}>{books.length}</span> read</span>
           {currentlyReadingCount > 0 && <><span style={{ color: "var(--border-mid)" }}>·</span><span><span className="font-medium" style={{ color: "var(--text-1)" }}>{currentlyReadingCount}</span> reading now</span></>}
           {dnfCount > 0 && <><span style={{ color: "var(--border-mid)" }}>·</span><span><span className="font-medium" style={{ color: "var(--text-1)" }}>{dnfCount}</span> did not finish</span></>}
+          {wantToReadCount > 0 && <><span style={{ color: "var(--border-mid)" }}>·</span><span><span className="font-medium" style={{ color: "var(--text-1)" }}>{wantToReadCount}</span> want to read</span></>}
           <span style={{ color: "var(--border-mid)" }}>·</span>
           <span><span className="font-medium" style={{ color: "var(--text-1)" }}>{books.length + currentlyReadingCount + dnfCount}</span> total</span>
         </div>

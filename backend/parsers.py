@@ -166,7 +166,12 @@ async def parse_rss(profile_url: str) -> dict:
             f"{base}?shelf=did-not-finish&per_page=200", headers=headers, follow_redirects=True
         )
 
-    # Parse all three feeds
+        await asyncio.sleep(0.4)
+        tbr_resp = await client.get(
+            f"{base}?shelf=to-read&per_page=200", headers=headers, follow_redirects=True
+        )
+
+    # Parse all feeds
     read_raw = parse_feed(read_resp.text, "read")
 
     currently_reading = (
@@ -186,6 +191,12 @@ async def parse_rss(profile_url: str) -> dict:
             if any(s in dnf_keywords for s in b.get("_user_shelves", []))
         ]
 
+    want_to_read = (
+        [_strip_internal(b) for b in parse_feed(tbr_resp.text, "to-read")]
+        if _is_rss(tbr_resp.text)
+        else []
+    )
+
     # Build the read list: rated books that aren't in DNF
     dnf_titles_lower = {b["title"].lower() for b in dnf}
     books = [
@@ -197,6 +208,7 @@ async def parse_rss(profile_url: str) -> dict:
         "books": books,
         "currently_reading": currently_reading,
         "dnf": dnf,
+        "want_to_read": want_to_read,
     }
 
 

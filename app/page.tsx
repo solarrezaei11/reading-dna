@@ -52,6 +52,7 @@ export default function Home() {
       sessionStorage.setItem("books", JSON.stringify(data.books));
       sessionStorage.setItem("currently_reading", JSON.stringify(data.currently_reading || []));
       sessionStorage.setItem("dnf", JSON.stringify(data.dnf || []));
+      sessionStorage.setItem("want_to_read", JSON.stringify(data.want_to_read || []));
       sessionStorage.setItem("library", library);
       router.push("/analyze");
     } catch (e: unknown) {
