@@ -20,6 +20,8 @@ export default function AnalyzePage() {
   const [dna, setDna] = useState<any>(null);
   const [battle, setBattle] = useState<any>(null);
   const [judgeData, setJudgeData] = useState<any>(null);
+  const [judgeLoading, setJudgeLoading] = useState(false);
+  const [judgeError, setJudgeError] = useState("");
   const [mapData, setMapData] = useState<any>(null);
   const [libbyData, setLibbyData] = useState<any>(null);
   const [error, setError] = useState("");
@@ -62,12 +64,20 @@ export default function AnalyzePage() {
       const battleData = await battleRes.json();
       setBattle(battleData);
 
-      // Judge — fire and forget, loads separately (Ollama is local/slow)
+      // Judge — fires async so it doesn't block map loading (Ollama is local/slow ~2min)
+      setJudgeLoading(true);
+      const judgeController = new AbortController();
+      const judgeTimeout = setTimeout(() => judgeController.abort(), 5 * 60 * 1000);
       fetch(`${API}/judge`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ dna_profile: dnaData, battle_results: battleData }),
-      }).then(r => r.ok ? r.json() : null).then(j => { if (j) setJudgeData(j); }).catch(() => {});
+        signal: judgeController.signal,
+      })
+        .then(r => r.ok ? r.json() : Promise.reject(`HTTP ${r.status}`))
+        .then(j => { setJudgeData(j); setJudgeLoading(false); })
+        .catch(e => { setJudgeError(e?.name === "AbortError" ? "Timed out" : String(e)); setJudgeLoading(false); })
+        .finally(() => clearTimeout(judgeTimeout));
 
       // Check Libby if library provided
       if (lib) {
@@ -160,7 +170,7 @@ export default function AnalyzePage() {
       {/* Unified Map + Battle — inline loading */}
       {dna && (
         mapData && battle ? (
-          <UnifiedMap mapData={mapData} battle={{ ...battle, ...(judgeData ?? {}) }} libbyData={libbyData} library={library} />
+          <UnifiedMap mapData={mapData} battle={{ ...battle, ...(judgeData ?? {}) }} libbyData={libbyData} library={library} judgeLoading={judgeLoading} judgeError={judgeError} />
         ) : (
           <div className="space-y-4">
             <h2 className="text-lg font-semibold text-zinc-300">Reading Universe</h2>

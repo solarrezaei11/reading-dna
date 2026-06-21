@@ -58,6 +58,8 @@ type Props = {
       error?: string;
     }>;
   };
+  judgeLoading?: boolean;
+  judgeError?: string;
   libbyData?: Record<string, { available: boolean; title: string; url: string }>;
   library?: string;
 };
@@ -76,7 +78,7 @@ const MODEL_COLORS: Record<string, string> = {
 };
 const BOTH_COLOR = "#f59e0b"; // gold for consensus glow rings
 
-export default function UnifiedMap({ mapData, battle, libbyData }: Props) {
+export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, judgeError }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [expandedCluster, setExpandedCluster] = useState<number | null>(null);
   const [activeModel, setActiveModel] = useState<string | null>(null);
@@ -526,7 +528,9 @@ export default function UnifiedMap({ mapData, battle, libbyData }: Props) {
               className="text-left rounded-xl p-4 transition-all"
               style={{
                 background: isActive ? `${color}12` : "rgba(255,255,255,0.03)",
-                border: `1px solid ${isActive ? color + "50" : "rgba(255,255,255,0.08)"}`,
+                borderTop: `1px solid ${isActive ? color + "50" : "rgba(255,255,255,0.08)"}`,
+                borderRight: `1px solid ${isActive ? color + "50" : "rgba(255,255,255,0.08)"}`,
+                borderBottom: `1px solid ${isActive ? color + "50" : "rgba(255,255,255,0.08)"}`,
                 borderLeft: `3px solid ${color}`,
               }}
             >
@@ -602,6 +606,22 @@ export default function UnifiedMap({ mapData, battle, libbyData }: Props) {
       </div>
 
       {/* Judge's Verdict */}
+      {(judgeLoading || judgeError || battle.judge) && !("error" in (battle.judge ?? {})) && (() => {
+        if (judgeLoading) return (
+          <div className="mt-6 rounded-2xl border border-white/10 overflow-hidden" style={{ background: "#13131f" }}>
+            <div className="flex items-center gap-3 px-5 py-4">
+              <div className="w-4 h-4 border-2 border-purple-400 border-t-transparent rounded-full animate-spin shrink-0" />
+              <span className="text-xs text-zinc-400">Qwen 2.5 7B is evaluating both models' reasoning — takes ~2 min locally...</span>
+            </div>
+          </div>
+        );
+        if (judgeError) return (
+          <div className="mt-6 rounded-2xl border border-red-500/20 px-5 py-4" style={{ background: "#13131f" }}>
+            <span className="text-xs text-red-400">Judge error: {judgeError}. Is Ollama running?</span>
+          </div>
+        );
+        return null; // falls through to the main judge render below
+      })()}
       {battle.judge && !("error" in battle.judge) && (() => {
         const SCORE_LABELS: Record<string, string> = {
           relevance: "Relevance",
