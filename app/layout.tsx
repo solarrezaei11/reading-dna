@@ -8,7 +8,24 @@ const dmSerif = DM_Serif_Display({ weight: "400", variable: "--font-dm-serif", s
 
 export const metadata: Metadata = {
   title: "ReadingDNA — Which AI knows you best as a reader?",
-  description: "Import your Goodreads history. We build your taste profile, then two AI models compete to recommend books — and you see who knows you better.",
+  description: "Import your Goodreads history. Two AI models compete to recommend books you'll love — and you see who knows your taste better. Get your Reading DNA profile.",
+  keywords: ["goodreads", "book recommendations", "AI books", "reading profile", "book taste", "reading DNA", "book finder"],
+  openGraph: {
+    title: "ReadingDNA — Which AI knows you best as a reader?",
+    description: "Import your Goodreads history. Two AI models compete to recommend books you'll love — see who wins.",
+    type: "website",
+    siteName: "ReadingDNA",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ReadingDNA — Which AI knows you best as a reader?",
+    description: "Import your Goodreads history. Two AI models compete to recommend books you'll love — see who wins.",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true },
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
