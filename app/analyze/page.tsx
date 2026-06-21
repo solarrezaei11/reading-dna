@@ -169,7 +169,7 @@ export default function AnalyzePage() {
           {dnfCount > 0 && <><span style={{ color: "var(--border-mid)" }}>·</span><span><span className="font-medium" style={{ color: "var(--text-1)" }}>{dnfCount}</span> did not finish</span></>}
           {wantToReadCount > 0 && <><span style={{ color: "var(--border-mid)" }}>·</span><span><span className="font-medium" style={{ color: "var(--text-1)" }}>{wantToReadCount}</span> want to read</span></>}
           <span style={{ color: "var(--border-mid)" }}>·</span>
-          <span><span className="font-medium" style={{ color: "var(--text-1)" }}>{books.length + currentlyReadingCount + dnfCount}</span> total</span>
+          <span><span className="font-medium" style={{ color: "var(--text-1)" }}>{books.length + currentlyReadingCount + dnfCount + wantToReadCount}</span> total</span>
         </div>
       </div>
 
