@@ -399,16 +399,42 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
                 </span>
               </div>
               {m.info?.description && <p className="text-[11px] leading-relaxed mb-3" style={{ color: "var(--text-2)" }}>{m.info.description}</p>}
+              {m.meta && (() => {
+                const { ttft_ms, generation_ms, latency_ms, prompt_tokens, completion_tokens } = m.meta;
+                const tokPerSec = completion_tokens && generation_ms ? Math.round(completion_tokens / (generation_ms / 1000)) : null;
+                const tokPerRec = completion_tokens ? Math.round(completion_tokens / 5) : null;
+                const ttftPct   = ttft_ms && latency_ms ? (ttft_ms / latency_ms) * 100 : null;
+                const genPct    = generation_ms && latency_ms ? (generation_ms / latency_ms) * 100 : null;
+                return (
+                  <div className="mb-3 space-y-2">
+                    {/* Latency breakdown bar */}
+                    {ttftPct !== null && genPct !== null && (
+                      <div>
+                        <div className="flex justify-between text-[9px] mb-0.5" style={{ color: "var(--text-3)" }}>
+                          <span>wall-clock breakdown</span>
+                          <span className="font-mono">{latency_ms.toLocaleString()} ms total</span>
+                        </div>
+                        <div className="flex h-1.5 rounded-full overflow-hidden w-full" style={{ background: "var(--border-mid)" }}>
+                          <div style={{ width: `${ttftPct}%`, background: color, opacity: 0.5 }} title={`TTFT: ${ttft_ms} ms`} />
+                          <div style={{ width: `${genPct}%`, background: color }} title={`Generation: ${generation_ms} ms`} />
+                        </div>
+                        <div className="flex gap-3 mt-0.5 text-[9px]" style={{ color: "var(--text-3)" }}>
+                          <span><span style={{ background: color, opacity: 0.5, display: "inline-block", width: 6, height: 6, borderRadius: 1, marginRight: 3 }} />{ttft_ms} ms TTFT</span>
+                          <span><span style={{ background: color, display: "inline-block", width: 6, height: 6, borderRadius: 1, marginRight: 3 }} />{generation_ms} ms gen</span>
+                        </div>
+                      </div>
+                    )}
+                    {/* Token throughput */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-1 text-[11px]">
+                      {prompt_tokens != null && <div><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{prompt_tokens.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>prompt tkns</span></div>}
+                      {completion_tokens != null && <div><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{completion_tokens.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>output tkns</span></div>}
+                      {tokPerRec != null && <div title="avg tokens per recommendation"><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{tokPerRec}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>tkns/rec</span></div>}
+                      {tokPerSec != null && <div title="decode throughput"><span className="font-mono font-semibold" style={{ color }}>{tokPerSec.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>tok/s</span></div>}
+                    </div>
+                  </div>
+                );
+              })()}
               <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-[11px]">
-                {m.meta && (
-                  <>
-                    {m.meta.ttft_ms != null && <div title="Time to first token"><span className="font-mono font-semibold" style={{ color }}>{m.meta.ttft_ms.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>ms TTFT</span></div>}
-                    {m.meta.generation_ms != null && <div title="Generation time after first token"><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{m.meta.generation_ms.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>ms gen</span></div>}
-                    <div><span className="font-mono font-semibold" style={{ color: "var(--text-3)" }}>{m.meta.latency_ms.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>ms total</span></div>
-                    {m.meta.prompt_tokens != null && <div><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{m.meta.prompt_tokens.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>prompt tkns</span></div>}
-                    {m.meta.completion_tokens != null && <div><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{m.meta.completion_tokens.toLocaleString()}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>output tkns</span></div>}
-                  </>
-                )}
                 <div><span className="font-mono font-semibold" style={{ color: "var(--text-2)" }}>{recCount}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>unique picks</span></div>
                 {consensusCount > 0 && <div><span className="font-mono font-semibold" style={{ color: BOTH_COLOR }}>{consensusCount}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>both agreed</span></div>}
                 {(() => { const gems = (m.recommendations || []).filter((r: any) => r.hidden_gem).length; return gems > 0 ? <div><span className="font-mono font-semibold" style={{ color: "#8a6c20" }}>{gems}</span><span className="ml-1" style={{ color: "var(--text-3)" }}>hidden gem{gems > 1 ? "s" : ""}</span></div> : null; })()}
