@@ -46,7 +46,7 @@ Themes to avoid: {', '.join(dna.get('avoid_themes', []))}
 Prose density preference: {dna.get('taste_dimensions', {}).get('prose_density')}/10
 Pacing preference: {dna.get('taste_dimensions', {}).get('pacing_preference')}/10
 Intellectual depth: {dna.get('taste_dimensions', {}).get('intellectual_depth')}/10
-Fiction ratio: {dna.get('taste_dimensions', {}).get('fiction_ratio', 50)}% — {"this reader is primarily a non-fiction reader; strongly prefer non-fiction recommendations" if dna.get('taste_dimensions', {}).get('fiction_ratio', 50) < 40 else "this reader is primarily a fiction reader; strongly prefer fiction recommendations" if dna.get('taste_dimensions', {}).get('fiction_ratio', 50) > 60 else "this reader reads a mix of fiction and non-fiction"}
+Fiction ratio: {(fr := int(dna.get('taste_dimensions', {}).get('fiction_ratio') or 50))}% — {"this reader is primarily a non-fiction reader; strongly prefer non-fiction recommendations" if fr < 40 else "this reader is primarily a fiction reader; strongly prefer fiction recommendations" if fr > 60 else "this reader reads a mix of fiction and non-fiction"}
 
 Books they've already read (do NOT recommend these):
 {', '.join(read_titles[:60])}{dnf_note}{cr_note}{tbr_note}
@@ -103,11 +103,28 @@ async def call_model(model: str, prompt: str) -> dict:
     total_ms = round((t_end - t0) * 1000)
 
     text = "".join(chunks).strip()
+    # Strip markdown fences
     if text.startswith("```"):
         text = text.split("```")[1]
         if text.startswith("json"):
             text = text[4:]
-    data = json.loads(text.strip())
+    text = text.strip()
+    # If still not valid JSON, extract the outermost {...} block
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start != -1 and end > start:
+            try:
+                data = json.loads(text[start:end])
+            except json.JSONDecodeError as e:
+                print(f"[{model}] JSON parse error: {e}")
+                print(f"[{model}] Raw response: {text[:600]}")
+                raise
+        else:
+            print(f"[{model}] No JSON object found in response: {text[:600]}")
+            raise ValueError(f"No JSON object found in {model} response")
     data["_meta"] = {
         "latency_ms": total_ms,
         "ttft_ms": ttft_ms,
