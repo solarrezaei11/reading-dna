@@ -3,6 +3,28 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import * as d3 from "d3";
 
+function coverUrl(isbn?: string) {
+  if (!isbn) return null;
+  return `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`;
+}
+
+function BookCover({ isbn, title, size = 56 }: { isbn?: string; title: string; size?: number }) {
+  const src = coverUrl(isbn);
+  const [failed, setFailed] = useState(false);
+  if (!src || failed) return null;
+  return (
+    <img
+      src={src}
+      alt={title}
+      width={size}
+      height={size * 1.5}
+      onError={() => setFailed(true)}
+      className="rounded object-cover shrink-0"
+      style={{ width: size, height: size * 1.5, boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}
+    />
+  );
+}
+
 type UserPoint   = { title: string; author: string; my_rating: number; cluster_id: number; cluster_name: string; x: number; y: number };
 type GenreAnchor = { name: string; x: number; y: number; explored: boolean };
 type RecPoint    = { title: string; author: string; year?: string; isbn?: string; why?: string; comfort_zone?: boolean; on_tbr?: boolean; hidden_gem?: boolean; model_name?: string; x: number; y: number };
@@ -286,8 +308,13 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
                     <div className="text-[10px] uppercase tracking-widest font-semibold mb-1.5" style={{ color: labelColor }}>
                       {r.isConsensus ? "Both models" : r.model_name}{r.comfort_zone === false ? " · outside comfort zone" : ""}
                     </div>
-                    <div className="font-medium leading-snug" style={{ color: "var(--text-1)" }}>{r.title}</div>
-                    <div className="mt-0.5" style={{ color: "var(--text-2)" }}>{r.author}</div>
+                    <div className="flex gap-2.5 items-start">
+                      <BookCover isbn={r.isbn} title={r.title} size={44} />
+                      <div className="min-w-0">
+                        <div className="font-medium leading-snug" style={{ color: "var(--text-1)" }}>{r.title}</div>
+                        <div className="mt-0.5" style={{ color: "var(--text-2)" }}>{r.author}</div>
+                      </div>
+                    </div>
                     <div className="mt-1.5 flex flex-wrap gap-1">
                       {r.on_tbr && (
                         <span className="inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full"
@@ -354,11 +381,16 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
                       const libby = libbyData?.[r.isbn || ""];
                       return (
                         <div key={i} className="pb-3 border-b last:border-0" style={{ borderColor: "var(--border)" }}>
-                          <div className="text-[10px] font-semibold mb-0.5" style={{ color }}>{r.isConsensus ? "Both models" : r.model_name}</div>
-                          <div className="text-xs font-medium leading-snug" style={{ color: "var(--text-1)" }}>{r.title}</div>
-                          <div className="text-[11px] mt-0.5" style={{ color: "var(--text-2)" }}>{r.author}</div>
-                          {r.why && <div className="text-[10px] mt-1 leading-snug" style={{ color: "var(--text-3)" }}>{r.why}</div>}
-                          {libby?.available && <div className="text-[10px] mt-1" style={{ color: "var(--sage)" }}>Available on Libby</div>}
+                          <div className="text-[10px] font-semibold mb-1" style={{ color }}>{r.isConsensus ? "Both models" : r.model_name}</div>
+                          <div className="flex gap-2 items-start">
+                            <BookCover isbn={r.isbn} title={r.title} size={36} />
+                            <div className="min-w-0">
+                              <div className="text-xs font-medium leading-snug" style={{ color: "var(--text-1)" }}>{r.title}</div>
+                              <div className="text-[11px] mt-0.5" style={{ color: "var(--text-2)" }}>{r.author}</div>
+                              {r.why && <div className="text-[10px] mt-1 leading-snug" style={{ color: "var(--text-3)" }}>{r.why}</div>}
+                              {libby?.available && <div className="text-[10px] mt-1" style={{ color: "var(--sage)" }}>Available on Libby</div>}
+                            </div>
+                          </div>
                         </div>
                       );
                     })}
