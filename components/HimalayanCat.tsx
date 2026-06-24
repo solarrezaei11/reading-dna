@@ -4,12 +4,12 @@
 const P: Record<string, string | null> = {
   '.': null,
   'C': '#fff0d8',  // warm cream body
-  'M': '#9a5a2a',  // seal brown face mask (colorpoint)
-  'D': '#4a2810',  // dark brown ear tips / paw tops
+  'M': '#d4a878',  // light caramel points — visible but not scary
+  'D': '#5a3018',  // dark brown ear tips / paw tops
   'i': '#d49070',  // ear inner pink
-  'B': '#a06020',  // warm amber/copper eyes (matches real cat)
-  'p': '#180e04',  // dark pupil
-  'w': '#ffe8aa',  // warm eye shine
+  'B': '#89b8e8',  // soft blue eyes (Himalayan standard, reads as cute)
+  'p': '#1a1422',  // dark pupil
+  'w': '#ffffff',  // eye shine
   'N': '#e07888',  // pink nose
   'G': '#5a8a5a',  // book cover sage
   's': '#3d6b3d',  // book spine
