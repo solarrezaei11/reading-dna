@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef } from "react";
+import { BookCover } from "./BookCover";
 
 type Props = { dna: any; bookCount: number };
 
@@ -89,12 +90,14 @@ export default function ShareCard({ dna, bookCount }: Props) {
           {topBooks.length > 0 && (
             <div className="space-y-2">
               <div className="text-[10px] tracking-[0.18em] uppercase" style={{ color: "rgba(90,138,90,0.55)", fontFamily: "var(--font-geist-mono)" }}>Most loved</div>
-              <div className="space-y-1.5">
+              <div className="space-y-2.5">
                 {topBooks.map((b: any, i: number) => (
-                  <div key={i} className="flex items-baseline gap-2">
-                    <span className="text-[10px] font-mono" style={{ color: "rgba(90,138,90,0.5)" }}>{i + 1}</span>
-                    <span className="text-xs truncate" style={{ color: "rgba(242,236,224,0.85)" }}>{b.title}</span>
-                    <span className="text-[10px] shrink-0" style={{ color: "rgba(160,136,112,0.7)" }}>— {b.author}</span>
+                  <div key={i} className="flex items-center gap-2.5">
+                    <BookCover isbn={b.isbn} title={b.title} author={b.author} size={32} />
+                    <div className="min-w-0">
+                      <div className="text-xs leading-snug truncate" style={{ color: "rgba(242,236,224,0.9)" }}>{b.title}</div>
+                      <div className="text-[10px] mt-0.5" style={{ color: "rgba(160,136,112,0.7)" }}>{b.author}</div>
+                    </div>
                   </div>
                 ))}
               </div>

@@ -2,30 +2,9 @@
 
 import { useEffect, useRef, useState, useMemo } from "react";
 import * as d3 from "d3";
+import { BookCover } from "./BookCover";
 
-function coverUrl(isbn?: string) {
-  if (!isbn) return null;
-  return `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg`;
-}
-
-function BookCover({ isbn, title, size = 56 }: { isbn?: string; title: string; size?: number }) {
-  const src = coverUrl(isbn);
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) return null;
-  return (
-    <img
-      src={src}
-      alt={title}
-      width={size}
-      height={size * 1.5}
-      onError={() => setFailed(true)}
-      className="rounded object-cover shrink-0"
-      style={{ width: size, height: size * 1.5, boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}
-    />
-  );
-}
-
-type UserPoint   = { title: string; author: string; my_rating: number; cluster_id: number; cluster_name: string; x: number; y: number };
+type UserPoint   = { title: string; author: string; isbn?: string; my_rating: number; cluster_id: number; cluster_name: string; x: number; y: number };
 type GenreAnchor = { name: string; x: number; y: number; explored: boolean };
 type RecPoint    = { title: string; author: string; year?: string; isbn?: string; why?: string; comfort_zone?: boolean; on_tbr?: boolean; hidden_gem?: boolean; model_name?: string; x: number; y: number };
 type DedupedRec  = RecPoint & { isConsensus: boolean };
@@ -290,15 +269,18 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
             <div className="absolute z-20 pointer-events-none rounded-xl px-3 py-2.5 text-xs shadow-lg"
               style={{ left: Math.min(tooltip.x + 14, 350), top: Math.max(tooltip.y - 60, 8), background: "var(--surface)", border: "1px solid var(--border-mid)", maxWidth: 220, backdropFilter: "blur(8px)" }}>
               {tooltip.type === "book" && (
-                <>
-                  <div className="font-medium leading-snug" style={{ color: "var(--text-1)" }}>{tooltip.content.title}</div>
-                  <div className="mt-0.5" style={{ color: "var(--text-2)" }}>{tooltip.content.author}</div>
-                  {tooltip.content.my_rating > 0 && (
-                    <div className="mt-1 text-[11px]" style={{ color: "var(--sand)" }}>
-                      {"★".repeat(tooltip.content.my_rating)}<span style={{ color: "var(--border-mid)" }}>{"★".repeat(5 - tooltip.content.my_rating)}</span>
-                    </div>
-                  )}
-                </>
+                <div className="flex gap-2.5 items-start">
+                  <BookCover isbn={tooltip.content.isbn} title={tooltip.content.title} author={tooltip.content.author} size={44} />
+                  <div className="min-w-0">
+                    <div className="font-medium leading-snug" style={{ color: "var(--text-1)" }}>{tooltip.content.title}</div>
+                    <div className="mt-0.5" style={{ color: "var(--text-2)" }}>{tooltip.content.author}</div>
+                    {tooltip.content.my_rating > 0 && (
+                      <div className="mt-1 text-[11px]" style={{ color: "var(--sand)" }}>
+                        {"★".repeat(tooltip.content.my_rating)}<span style={{ color: "var(--border-mid)" }}>{"★".repeat(5 - tooltip.content.my_rating)}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               )}
               {tooltip.type === "rec" && (() => {
                 const r = tooltip.content;
@@ -309,7 +291,7 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
                       {r.isConsensus ? "Both models" : r.model_name}{r.comfort_zone === false ? " · outside comfort zone" : ""}
                     </div>
                     <div className="flex gap-2.5 items-start">
-                      <BookCover isbn={r.isbn} title={r.title} size={44} />
+                      <BookCover isbn={r.isbn} title={r.title} author={r.author} size={44} />
                       <div className="min-w-0">
                         <div className="font-medium leading-snug" style={{ color: "var(--text-1)" }}>{r.title}</div>
                         <div className="mt-0.5" style={{ color: "var(--text-2)" }}>{r.author}</div>
@@ -383,7 +365,7 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
                         <div key={i} className="pb-3 border-b last:border-0" style={{ borderColor: "var(--border)" }}>
                           <div className="text-[10px] font-semibold mb-1" style={{ color }}>{r.isConsensus ? "Both models" : r.model_name}</div>
                           <div className="flex gap-2 items-start">
-                            <BookCover isbn={r.isbn} title={r.title} size={36} />
+                            <BookCover isbn={r.isbn} title={r.title} author={r.author} size={36} />
                             <div className="min-w-0">
                               <div className="text-xs font-medium leading-snug" style={{ color: "var(--text-1)" }}>{r.title}</div>
                               <div className="text-[11px] mt-0.5" style={{ color: "var(--text-2)" }}>{r.author}</div>

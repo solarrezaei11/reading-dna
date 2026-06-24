@@ -86,4 +86,12 @@ blind_spot_genres are genres that critically acclaimed readers with similar tast
     profile = json.loads(text.strip())
     profile["total_books"] = total
     profile["avg_rating"] = round(avg, 2)
+
+    # Enrich top_books with real ISBNs from actual Goodreads data (LLM doesn't know these)
+    isbn_map = {b["title"].lower(): b.get("isbn", "") for b in books if b.get("isbn")}
+    for tb in profile.get("top_books", []):
+        real_isbn = isbn_map.get(tb.get("title", "").lower(), "")
+        if real_isbn:
+            tb["isbn"] = real_isbn
+
     return profile
