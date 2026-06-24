@@ -18,21 +18,23 @@ const P: Record<string, string | null> = {
   'm': '#9a6858',  // mouth
 };
 
-// 16 wide × 22 tall — seal-point Himalayan with face mask
+// 16 wide × 22 tall
+// Himalayan look: cream face, blue eyes, dark ear tips + dark paws
+// (at 8px/pixel, face masks read as scary — points live at ears & paws only)
 const OPEN = [
   '..DD........DD..',  //  0 — dark ear tips
-  '.DiDD......DDiD.',  //  1 — ears with inner pink
-  '.DDCCCCCCCCCCDD.',  //  2 — head top, dark ear bases
-  '.CCCMMMMMMMMCCC.',  //  3 — forehead, mask begins (narrower)
-  'CCCMMMMMMMMMMCCC',  //  4 — brow / upper mask
-  'CCCMMMMMMMMMMCCC',  //  5 — upper mask
-  'CCCMBBMMMMBBMCCC',  //  6 — amber eyes inside mask
-  'CCCMBpMNNMBpMCCC',  //  7 — pupils + pink nose
-  'CCCMBwMMMMBwMCCC',  //  8 — eye shine
-  'CCCMMMMmMmMMMCCC',  //  9 — ω mouth in mask
-  '.CCMMMMMMMMMMCC.',  // 10 — lower mask / muzzle
-  '..CCCCCCCCCCCC..',  // 11 — cream neck
-  '.CCCCCCCCCCCCCC.',  // 12 — body
+  '.DiDD......DDiD.',  //  1 — ears
+  '.DDCCCCCCCCCCDD.',  //  2 — head top
+  '.CCCCCCCCCCCCCC.',  //  3 — cream forehead
+  'CCCCCCCCCCCCCCCC',  //  4
+  'CCCCCCCCCCCCCCCC',  //  5
+  'CCCCBBCCCCBBCCCC',  //  6 — 2-wide soft blue eyes
+  'CCCCBpCNNCBpCCCC',  //  7 — pupils + pink nose
+  'CCCCBwCCCCBwCCCC',  //  8 — eye shine
+  'CCCCCCCmCmCCCCCC',  //  9 — ω mouth
+  '.CCCCCCCCCCCCCC.',  // 10
+  '..CCCCCCCCCCCC..',  // 11 — neck
+  '.CCCCCCCCCCCCCC.',  // 12
   'CCCCCCCCCCCCCCCC',  // 13
   'CCCCCCCCCCCCCCCC',  // 14
   'CCCCCCCCCCCCCCCC',  // 15
@@ -44,10 +46,9 @@ const OPEN = [
   '....GGGGsggggg..',  // 21
 ];
 
-// Blink: eyes close but nose stays visible
-const CLOSED_6 = 'CCCMMMMMMMMMMCCC';
-const CLOSED_7 = 'CCCMddMNNMddMCCC';
-const CLOSED_8 = 'CCCMMMMMMMMMMCCC';
+const CLOSED_6 = 'CCCCCCCCCCCCCCCC';
+const CLOSED_7 = 'CCCCddCCCCddCCCC';  // 2-wide blink line
+const CLOSED_8 = 'CCCCCCCCCCCCCCCC';
 
 const SZ = 8;
 const W  = 16 * SZ;
