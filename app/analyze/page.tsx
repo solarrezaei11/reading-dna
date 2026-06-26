@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import DNAProfile from "@/components/DNAProfile";
 import UnifiedMap from "@/components/UnifiedMap";
 import ShareCard from "@/components/ShareCard";
+import FamousReaderMatch from "@/components/FamousReaderMatch";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -176,8 +177,9 @@ export default function AnalyzePage() {
       {/* DNA Profile + Share Card */}
       {dna ? (
         <div className="flex flex-col lg:flex-row gap-8 items-start">
-          <div className="flex-1 min-w-0">
+          <div className="flex-1 min-w-0 space-y-4">
             <DNAProfile dna={dna} />
+            <FamousReaderMatch dna={dna} />
           </div>
           <div className="lg:sticky lg:top-8 shrink-0">
             <ShareCard dna={dna} bookCount={books.length} />
