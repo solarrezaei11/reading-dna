@@ -4,7 +4,6 @@
 const P: Record<string, string | null> = {
   '.': null,
   'C': '#fff0d8',  // warm cream body
-  'M': '#d4a878',  // light caramel points — visible but not scary
   'D': '#5a3018',  // dark brown ear tips / paw tops
   'i': '#d49070',  // ear inner pink
   'B': '#89b8e8',  // soft blue eyes (Himalayan standard, reads as cute)
