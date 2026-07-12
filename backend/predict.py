@@ -196,8 +196,9 @@ async def predict_rating(title: str, author: str | None, dna: dict, books: list[
     predictions: dict = {}
     for model_id, res in zip(MODELS, results, strict=True):
         display = MODEL_INFO.get(model_id, {}).get("display", model_id)
-        if isinstance(res, Exception):
-            predictions[display] = {"error": str(res)}
+        # BaseException catches asyncio.CancelledError too (it's not an Exception subclass)
+        if isinstance(res, BaseException):
+            predictions[display] = {"error": str(res) or type(res).__name__}
         else:
             meta = res.pop("_meta", {})
             predictions[display] = {
