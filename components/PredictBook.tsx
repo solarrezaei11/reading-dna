@@ -28,17 +28,25 @@ export default function PredictBook({ dna, books }: Props) {
     setLoading(true);
     setError("");
     setResult(null);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
     try {
       const res = await fetch(`${API}/predict`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title: q, dna_profile: dna, books }),
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       setResult(await res.json());
-    } catch {
-      setError("Prediction failed — is the backend running?");
+    } catch (e: unknown) {
+      setError(
+        e instanceof Error && e.name === "AbortError"
+          ? "Prediction timed out — try again."
+          : "Prediction failed — is the backend running?"
+      );
     } finally {
+      clearTimeout(timeout);
       setLoading(false);
     }
   }
@@ -73,6 +81,7 @@ export default function PredictBook({ dna, books }: Props) {
           onChange={(e) => setTitle(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && predict()}
           placeholder="e.g. The Remains of the Day"
+          aria-label="Book title to predict"
           className="flex-1 min-w-0 rounded-xl px-3.5 py-2 text-sm outline-none transition-colors"
           style={{
             background: "var(--bg)",
@@ -113,11 +122,11 @@ export default function PredictBook({ dna, books }: Props) {
         >
           <BookCover isbn={result.book.isbn} title={result.book.title} author={result.book.author} size={40} />
           <div className="text-sm" style={{ color: "var(--text-2)" }}>
-            You've already read <span className="font-medium" style={{ color: "var(--text-1)" }}>{result.book.title}</span>
+            You&apos;ve already read <span className="font-medium" style={{ color: "var(--text-1)" }}>{result.book.title}</span>
             {result.actual_rating ? (
               <> — you gave it <Stars value={result.actual_rating} /></>
             ) : (
-              <> — you didn't rate it.</>
+              <> — you didn&apos;t rate it.</>
             )}
           </div>
         </div>
@@ -158,7 +167,7 @@ export default function PredictBook({ dna, books }: Props) {
                   <p className="text-xs" style={{ color: "var(--rust)" }}>{p.error}</p>
                 ) : (
                   <>
-                    <div className="text-2xl font-semibold" style={{ color: "var(--text-1)" }}>
+                    <div className="text-3xl" style={{ fontFamily: "var(--font-dm-serif)", fontStyle: "italic", color: "var(--text-1)" }}>
                       <Stars value={p.predicted_rating ?? 0} />
                     </div>
                     {typeof p.confidence === "number" && (

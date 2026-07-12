@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import time
 import uuid
@@ -48,7 +49,7 @@ def find_already_read(title: str, books: list[dict]) -> dict | None:
     q = title.lower().strip()
     for b in books:
         t = b.get("title", "").lower().strip()
-        if q == t or (len(q) > 8 and (q in t or t in q)):
+        if q == t or (len(q) > 8 and len(t) > 8 and (q in t or t in q)):
             return b
     return None
 
@@ -131,8 +132,9 @@ def log_prediction(entry: dict) -> None:
     try:
         with open(PREDICTIONS_LOG, "a") as f:
             f.write(json.dumps(entry) + "\n")
-    except Exception:
-        pass  # Logging must never break the request
+    except Exception as e:
+        # Logging must never break the request, but failures should be visible
+        print(f"[log_prediction] failed: {e}", file=sys.stderr)
 
 
 def load_predictions() -> list[dict]:
@@ -192,7 +194,7 @@ async def predict_rating(title: str, author: str | None, dna: dict, books: list[
     stages["total_ms"] = round((time.time() - t_start) * 1000)
 
     predictions: dict = {}
-    for model_id, res in zip(MODELS, results):
+    for model_id, res in zip(MODELS, results, strict=True):
         display = MODEL_INFO.get(model_id, {}).get("display", model_id)
         if isinstance(res, Exception):
             predictions[display] = {"error": str(res)}
