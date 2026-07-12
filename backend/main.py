@@ -11,6 +11,7 @@ from dna import build_dna_profile
 from llm_battle import run_battle, run_judge
 from embeddings import generate_embeddings_and_umap
 from libby import check_availability
+from predict import predict_rating, load_predictions
 
 app = FastAPI()
 
@@ -43,6 +44,12 @@ class JudgeRequest(BaseModel):
 class LibbyRequest(BaseModel):
     isbns: list[str]
     library_name: str
+
+class PredictRequest(BaseModel):
+    title: str
+    author: Optional[str] = None
+    dna_profile: dict
+    books: list[dict] = []
 
 @app.post("/parse/csv")
 async def upload_csv(file: UploadFile = File(...)):
@@ -89,6 +96,16 @@ async def get_embeddings(req: EmbeddingsRequest):
 async def libby_availability(req: LibbyRequest):
     results = await check_availability(req.isbns, req.library_name)
     return results
+
+@app.post("/predict")
+async def predict(req: PredictRequest):
+    if not req.title.strip():
+        raise HTTPException(status_code=400, detail="No title provided")
+    return await predict_rating(req.title, req.author, req.dna_profile, req.books)
+
+@app.get("/predictions")
+def predictions():
+    return {"predictions": load_predictions()}
 
 @app.get("/health")
 def health():

@@ -45,3 +45,6 @@ backend/*.pyc
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# local prediction log (per-user data)
+backend/predictions.jsonl
