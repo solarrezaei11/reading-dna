@@ -2,8 +2,8 @@
 
 :root {
   --bg:           #f7f2eb;   /* warm cream */
-  --surface:      #fdfaf5;   /* near-white warm */
-  --surface-2:    #ede8de;   /* slightly deeper card */
+  --surface:      rgba(253,250,245,0.66);  /* translucent — ambient light glows through */
+  --surface-2:    rgba(237,232,222,0.72);  /* slightly deeper card */
   --border:       rgba(139,107,70,0.14);
   --border-mid:   rgba(139,107,70,0.24);
   --border-strong:rgba(139,107,70,0.40);
@@ -43,3 +43,99 @@ body {
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: var(--surface-2); }
 ::-webkit-scrollbar-thumb { background: var(--warm); border-radius: 2px; }
+
+/* ── Paper grain — the whole page feels like uncoated stock ── */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  opacity: 0.05;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+/* ── Ambient orbs — soft botanical light drifting behind content ── */
+.orbs {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+}
+.orb {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(70px);
+}
+.orb-a {
+  width: 500px; height: 500px;
+  top: -140px; right: -110px;
+  background: radial-gradient(circle, rgba(90,138,90,0.22), transparent 65%);
+  animation: orb-drift-a 38s ease-in-out infinite alternate;
+}
+.orb-b {
+  width: 440px; height: 440px;
+  bottom: -160px; left: -130px;
+  background: radial-gradient(circle, rgba(196,168,130,0.22), transparent 65%);
+  animation: orb-drift-b 46s ease-in-out infinite alternate;
+}
+.orb-c {
+  width: 380px; height: 380px;
+  top: 38%; left: 52%;
+  background: radial-gradient(circle, rgba(74,140,126,0.15), transparent 65%);
+  animation: orb-drift-c 52s ease-in-out infinite alternate;
+}
+@keyframes orb-drift-a { to { transform: translate(-90px, 130px) scale(1.15); } }
+@keyframes orb-drift-b { to { transform: translate(110px, -100px) scale(1.08); } }
+@keyframes orb-drift-c { to { transform: translate(-130px, -90px) scale(0.9); } }
+@media (prefers-reduced-motion: reduce) {
+  .orb { animation: none; }
+}
+
+/* ── Frosted glass — cards blur the ambient light behind them ── */
+.rounded-2xl, .rounded-3xl {
+  backdrop-filter: blur(14px) saturate(1.15);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+}
+
+/* ── Staggered entrance — content arrives in sequence, not all at once ── */
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.rise {
+  opacity: 0;
+  animation: rise-in 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.rise-1 { animation-delay: 0.05s; }
+.rise-2 { animation-delay: 0.16s; }
+.rise-3 { animation-delay: 0.28s; }
+.rise-4 { animation-delay: 0.40s; }
+@media (prefers-reduced-motion: reduce) {
+  .rise { opacity: 1; animation: none; }
+}
+
+/* ── Hover lift — cards rise with a soft shadow bloom ── */
+.lift { transition: transform 0.3s cubic-bezier(0.22,1,0.36,1), box-shadow 0.3s ease; }
+.lift:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(139,107,70,0.13);
+}
+@media (prefers-reduced-motion: reduce) {
+  .lift:hover { transform: none; }
+}
+
+/* ── Loading ritual — a vine grows as stages complete ── */
+@keyframes vine-sway {
+  0%, 100% { transform: rotate(-1.5deg); }
+  50%      { transform: rotate(1.5deg); }
+}
+@keyframes leaf-in {
+  from { opacity: 0; transform: scale(0.4) rotate(-20deg); }
+  to   { opacity: 1; transform: scale(1) rotate(0); }
+}
+@keyframes fade-cycle {
+  0%, 100% { opacity: 0; transform: translateY(4px); }
+  12%, 88% { opacity: 1; transform: translateY(0); }
+}

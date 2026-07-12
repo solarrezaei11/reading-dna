@@ -7,6 +7,9 @@ import UnifiedMap from "@/components/UnifiedMap";
 import ShareCard from "@/components/ShareCard";
 import FamousReaderMatch from "@/components/FamousReaderMatch";
 import PredictBook from "@/components/PredictBook";
+import SectionHeader from "@/components/SectionHeader";
+import LoadingRitual from "@/components/LoadingRitual";
+import Wordmark from "@/components/Wordmark";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -152,82 +155,73 @@ export default function AnalyzePage() {
     );
   }
 
-  const spinnerStyle: React.CSSProperties = {
-    borderColor: "var(--sage) transparent var(--sage) var(--sage)",
-  };
 
   return (
     <main className="min-h-screen px-4 py-12 max-w-5xl mx-auto space-y-12">
 
       {/* Header */}
       <div className="text-center space-y-2">
-        <h1 className="text-3xl tracking-tight">
-          <span className="font-light" style={{ color: "var(--text-1)" }}>Reading</span>
-          <span style={{ fontFamily: "var(--font-dm-serif)", color: "var(--sage)", fontStyle: "italic" }}>DNA</span>
-        </h1>
+        <div className="flex justify-center"><Wordmark size="text-3xl" /></div>
         <div className="flex items-center justify-center gap-3 text-sm" style={{ color: "var(--text-3)" }}>
-          <span><span className="font-medium" style={{ color: "var(--text-1)" }}>{books.length}</span> read</span>
-          {currentlyReadingCount > 0 && <><span style={{ color: "var(--border-mid)" }}>·</span><span><span className="font-medium" style={{ color: "var(--text-1)" }}>{currentlyReadingCount}</span> reading now</span></>}
-          {dnfCount > 0 && <><span style={{ color: "var(--border-mid)" }}>·</span><span><span className="font-medium" style={{ color: "var(--text-1)" }}>{dnfCount}</span> did not finish</span></>}
-          {wantToReadCount > 0 && <><span style={{ color: "var(--border-mid)" }}>·</span><span><span className="font-medium" style={{ color: "var(--text-1)" }}>{wantToReadCount}</span> want to read</span></>}
+          {([
+            [books.length, "read"],
+            [currentlyReadingCount, "reading now"],
+            [dnfCount, "did not finish"],
+            [wantToReadCount, "want to read"],
+          ] as [number, string][])
+            .filter(([n, label]) => n > 0 || label === "read")
+            .map(([n, label], i) => (
+              <span key={label} className="flex items-center gap-3">
+                {i > 0 && <span style={{ color: "var(--border-mid)" }}>·</span>}
+                <span>
+                  <span className="text-base" style={{ fontFamily: "var(--font-dm-serif)", fontStyle: "italic", color: "var(--text-1)" }}>{n}</span> {label}
+                </span>
+              </span>
+            ))}
           <span style={{ color: "var(--border-mid)" }}>·</span>
-          <span><span className="font-medium" style={{ color: "var(--text-1)" }}>{books.length + currentlyReadingCount + dnfCount + wantToReadCount}</span> total</span>
+          <span>
+            <span className="text-base" style={{ fontFamily: "var(--font-dm-serif)", fontStyle: "italic", color: "var(--text-1)" }}>{books.length + currentlyReadingCount + dnfCount + wantToReadCount}</span> total
+          </span>
         </div>
       </div>
 
       {/* DNA Profile + Share Card */}
       {dna ? (
-        <div className="flex flex-col lg:flex-row gap-8 items-start">
-          <div className="flex-1 min-w-0 space-y-4">
-            <DNAProfile dna={dna} />
-            <PredictBook dna={dna} books={books} />
-            <FamousReaderMatch dna={dna} />
-          </div>
-          <div className="lg:sticky lg:top-8 shrink-0">
-            <ShareCard dna={dna} bookCount={books.length} />
+        <div className="space-y-6 rise rise-1">
+          <SectionHeader num="01" title="Your DNA" />
+          <div className="flex flex-col lg:flex-row gap-8 items-start">
+            <div className="flex-1 min-w-0 space-y-4">
+              <div className="rise rise-2"><DNAProfile dna={dna} /></div>
+              <div className="rise rise-3"><PredictBook dna={dna} books={books} /></div>
+              <div className="rise rise-4"><FamousReaderMatch dna={dna} /></div>
+            </div>
+            <div className="lg:sticky lg:top-8 shrink-0 rise rise-2">
+              <ShareCard dna={dna} bookCount={books.length} />
+            </div>
           </div>
         </div>
       ) : (
-        <div
-          className="flex items-center gap-3 rounded-2xl p-8"
-          style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-        >
-          <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin shrink-0" style={spinnerStyle} />
-          <span className="text-sm" style={{ color: "var(--text-2)" }}>Building your Reading DNA…</span>
-        </div>
+        <LoadingRitual step={step} />
       )}
 
       {/* Map + Battle */}
       {dna && (
         mapData && battle ? (
-          <UnifiedMap
-            mapData={mapData}
-            battle={{ ...battle, ...(judgeData ?? {}) }}
-            libbyData={libbyData}
-            library={library}
-            judgeLoading={judgeLoading}
-            judgeError={judgeError}
-            onRunJudge={runJudge}
-          />
+          <div className="rise rise-1">
+            <UnifiedMap
+              mapData={mapData}
+              battle={{ ...battle, ...(judgeData ?? {}) }}
+              libbyData={libbyData}
+              library={library}
+              judgeLoading={judgeLoading}
+              judgeError={judgeError}
+              onRunJudge={runJudge}
+            />
+          </div>
         ) : (
           <div className="space-y-4">
-            <h2
-              className="text-xl font-light tracking-tight"
-              style={{ fontFamily: "var(--font-dm-serif)", color: "var(--text-1)", fontStyle: "italic" }}
-            >
-              Reading Universe
-            </h2>
-            <div
-              className="rounded-2xl p-8 flex items-center gap-3"
-              style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
-            >
-              <div className="w-5 h-5 border-2 border-t-transparent rounded-full animate-spin shrink-0" style={spinnerStyle} />
-              <span className="text-sm" style={{ color: "var(--text-2)" }}>
-                {step === "battle"
-                  ? "Running AI model battle — two models are picking books for you…"
-                  : "Mapping your reading universe…"}
-              </span>
-            </div>
+            <SectionHeader num="02" title="Reading Universe" />
+            <LoadingRitual step={step} />
           </div>
         )
       )}

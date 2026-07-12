@@ -117,7 +117,7 @@ export default function FamousReaderMatch({ dna }: { dna: any }) {
 
   return (
     <div
-      className="rounded-2xl p-6 space-y-4"
+      className="rounded-2xl p-6 space-y-4 lift"
       style={{
         background: "linear-gradient(135deg, #1a200f 0%, #141a0c 100%)",
         border: "1px solid rgba(90,138,90,0.2)",
@@ -143,7 +143,7 @@ export default function FamousReaderMatch({ dna }: { dna: any }) {
           </p>
         </div>
         <div className="text-right shrink-0">
-          <div className="text-2xl font-semibold tabular-nums" style={{ color: "#7ab87a" }}>{top.pct}%</div>
+          <div className="text-3xl" style={{ fontFamily: "var(--font-dm-serif)", fontStyle: "italic", color: "#7ab87a" }}>{top.pct}%</div>
           <div className="text-[9px] uppercase tracking-widest mt-0.5" style={{ color: "rgba(90,138,90,0.45)" }}>match</div>
         </div>
       </div>

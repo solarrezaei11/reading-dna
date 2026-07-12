@@ -60,7 +60,7 @@ export default function PredictBook({ dna, books }: Props) {
 
   return (
     <div
-      className="rounded-2xl p-6 space-y-4"
+      className="rounded-2xl p-6 space-y-4 lift"
       style={{ background: "var(--surface)", border: "1px solid var(--border)" }}
     >
       <div>

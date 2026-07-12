@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useMemo } from "react";
 import * as d3 from "d3";
 import { BookCover } from "./BookCover";
+import SectionHeader from "./SectionHeader";
 
 type UserPoint   = { title: string; author: string; isbn?: string; my_rating: number; cluster_id: number; cluster_name: string; x: number; y: number };
 type GenreAnchor = { name: string; x: number; y: number; explored: boolean };
@@ -214,10 +215,7 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
 
   return (
     <section className="space-y-5">
-      <h2 className="text-xl font-light tracking-tight"
-        style={{ fontFamily: "var(--font-dm-serif)", color: "var(--text-1)", fontStyle: "italic" }}>
-        Reading Universe
-      </h2>
+      <SectionHeader num="02" title="Reading Universe" />
 
       {/* Legend */}
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-[11px]" style={{ color: "var(--text-3)" }}>
@@ -385,6 +383,9 @@ export default function UnifiedMap({ mapData, battle, libbyData, judgeLoading, j
       </div>
 
       {/* Model cards */}
+      <div className="pt-4">
+        <SectionHeader num="03" title="The Battle" />
+      </div>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
         {modelEntries.map(([name, m]) => {
           const color = MODEL_COLORS[name] || "var(--sage)";

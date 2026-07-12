@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import HimalayanCat from "@/components/HimalayanCat";
+import Wordmark from "@/components/Wordmark";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -78,10 +79,7 @@ export default function Home() {
             <HimalayanCat />
           </div>
 
-          <h1 className="text-4xl tracking-tight leading-none">
-            <span className="font-light" style={{ color: "var(--text-1)" }}>Reading</span>
-            <span style={{ fontFamily: "var(--font-dm-serif)", color: "var(--sage)", fontStyle: "italic" }}>DNA</span>
-          </h1>
+          <Wordmark />
           <p className="text-base leading-relaxed" style={{ color: "var(--text-2)" }}>
             Which AI knows you best as a reader?
           </p>

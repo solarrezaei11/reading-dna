@@ -51,13 +51,22 @@ export function BookCover({
 
   if (!src) return null;
 
+  // Slight perspective tilt — like a book propped on a shelf
   return (
-    <img
-      src={src}
-      alt={title}
-      onError={handleError}
-      className="rounded object-cover shrink-0"
-      style={{ width: size, height: size * 1.5, boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}
-    />
+    <div className="shrink-0" style={{ perspective: 400 }}>
+      <img
+        src={src}
+        alt={title}
+        onError={handleError}
+        className="rounded object-cover"
+        style={{
+          width: size,
+          height: size * 1.5,
+          transform: "rotateY(-14deg) rotateX(2deg)",
+          transformOrigin: "left center",
+          boxShadow: "3px 4px 12px rgba(45,32,22,0.22), 0 1px 3px rgba(45,32,22,0.14)",
+        }}
+      />
+    </div>
   );
 }

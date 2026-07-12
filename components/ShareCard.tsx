@@ -67,7 +67,7 @@ export default function ShareCard({ dna, bookCount }: Props) {
           <div className="grid grid-cols-3 gap-3 text-center">
             {[{ val: bookCount, label: "Books" }, { val: dna.avg_rating?.toFixed(1), label: "Avg rating" }, { val: `${Math.round(dims.fiction_ratio ?? 50)}%`, label: "Fiction" }].map(({ val, label }) => (
               <div key={label}>
-                <div className="text-xl font-semibold" style={{ color: "#f2ece0" }}>{val}</div>
+                <div className="text-2xl" style={{ fontFamily: "var(--font-dm-serif)", fontStyle: "italic", color: "#f2ece0" }}>{val}</div>
                 <div className="text-[9px] tracking-wider uppercase mt-0.5" style={{ color: "rgba(160,136,112,0.7)" }}>{label}</div>
               </div>
             ))}

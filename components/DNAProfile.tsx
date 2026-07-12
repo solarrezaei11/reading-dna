@@ -17,23 +17,32 @@ export default function DNAProfile({ dna }: Props) {
     <section className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
 
-        {/* Archetype */}
-        <div
-          className="rounded-2xl p-6 space-y-3 md:col-span-2"
-          style={{ background: "var(--surface)", border: "1px solid var(--border-mid)", boxShadow: "0 2px 12px rgba(139,107,70,0.06)" }}
-        >
-          <div className="text-[10px] tracking-[0.18em] uppercase font-medium" style={{ color: "var(--sage-dark)" }}>
-            Your Archetype
-          </div>
-          <div className="text-3xl leading-tight" style={{ fontFamily: "var(--font-dm-serif)", color: "var(--text-1)", fontStyle: "italic" }}>
+        {/* Archetype — the editorial moment */}
+        <div className="md:col-span-2 relative px-1 pt-8 pb-4">
+          <span
+            aria-hidden
+            className="absolute -top-3 -left-3 select-none pointer-events-none"
+            style={{ fontFamily: "var(--font-dm-serif)", fontSize: "7.5rem", lineHeight: 1, color: "var(--sage)", opacity: 0.12 }}
+          >
+            &ldquo;
+          </span>
+          <h2
+            className="text-4xl md:text-[3.4rem] leading-[1.08] text-balance"
+            style={{ fontFamily: "var(--font-dm-serif)", fontStyle: "italic", color: "var(--text-1)" }}
+          >
             {dna.reader_archetype}
-          </div>
-          <p className="text-sm leading-relaxed" style={{ color: "var(--text-2)" }}>{dna.taste_summary}</p>
+          </h2>
+          <svg className="mt-3" width="190" height="12" viewBox="0 0 190 12" fill="none" aria-hidden>
+            <path d="M2 8 C 45 2, 95 11, 188 5" stroke="var(--sage)" strokeWidth="2" strokeLinecap="round" opacity="0.5" />
+          </svg>
+          <p className="mt-4 text-sm md:text-base leading-relaxed max-w-xl" style={{ color: "var(--text-2)" }}>
+            {dna.taste_summary}
+          </p>
         </div>
 
         {/* Taste Spectrum */}
         <div
-          className="rounded-2xl p-5 space-y-4"
+          className="rounded-2xl p-5 space-y-4 lift"
           style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 1px 6px rgba(139,107,70,0.04)" }}
         >
           <div className="text-[10px] tracking-[0.18em] uppercase font-medium" style={{ color: "var(--text-3)" }}>
@@ -56,7 +65,7 @@ export default function DNAProfile({ dna }: Props) {
 
         {/* Themes */}
         <div
-          className="rounded-2xl p-5 space-y-4"
+          className="rounded-2xl p-5 space-y-4 lift"
           style={{ background: "var(--surface)", border: "1px solid var(--border)", boxShadow: "0 1px 6px rgba(139,107,70,0.04)" }}
         >
           <div className="text-[10px] tracking-[0.18em] uppercase font-medium" style={{ color: "var(--text-3)" }}>Top Themes</div>
