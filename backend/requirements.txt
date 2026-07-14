@@ -1,5 +1,5 @@
 cerebras_cloud_sdk==1.67.0
-fastapi==0.137.2
+fastapi==0.139.0
 httpx==0.28.1
 numpy==2.4.6
 pydantic==2.13.4
