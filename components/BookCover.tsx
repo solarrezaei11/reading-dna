@@ -1,14 +1,20 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import Image from "next/image";
+import { useEffect, useState } from "react";
 
 async function fetchCoverByTitle(title: string, author?: string): Promise<string | null> {
   try {
     const params = new URLSearchParams({ title, limit: "1", fields: "cover_i" });
     if (author) params.set("author", author);
     const res = await fetch(`https://openlibrary.org/search.json?${params}`);
-    const data = await res.json();
-    const id = data.docs?.[0]?.cover_i;
+    if (!res.ok) return null;
+    const data: unknown = await res.json();
+    const id = typeof data === "object" && data !== null &&
+      Array.isArray((data as { docs?: unknown }).docs) &&
+      typeof (data as { docs: Array<{ cover_i?: unknown }> }).docs[0]?.cover_i === "number"
+      ? (data as { docs: Array<{ cover_i: number }> }).docs[0].cover_i
+      : undefined;
     return id ? `https://covers.openlibrary.org/b/id/${id}-M.jpg` : null;
   } catch {
     return null;
@@ -26,35 +32,37 @@ export function BookCover({
   author?: string;
   size?: number;
 }) {
-  const [src, setSrc] = useState<string | null>(
-    isbn ? `https://covers.openlibrary.org/b/isbn/${isbn}-M.jpg?default=false` : null
-  );
-  const searchedRef = useRef(false);
+  const identity = `${isbn ?? ""}|${title}|${author ?? ""}`;
+  const [fallback, setFallback] = useState<{ identity: string; src: string | null } | null>(null);
+  const isbnCover = isbn ? `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-M.jpg?default=false` : null;
+  const src = fallback?.identity === identity ? fallback.src : isbnCover;
 
-  // If no ISBN supplied, kick off a title+author search immediately
   useEffect(() => {
-    if (!isbn && title && !searchedRef.current) {
-      searchedRef.current = true;
-      fetchCoverByTitle(title, author).then(url => url && setSrc(url));
+    let active = true;
+    if (!isbn && title) {
+      fetchCoverByTitle(title, author).then((url) => {
+        if (active) setFallback({ identity, src: url });
+      });
     }
-  }, [isbn, title, author]);
+    return () => { active = false; };
+  }, [author, identity, isbn, title]);
 
-  const handleError = useCallback(() => {
-    if (!searchedRef.current && title) {
-      // ISBN was wrong — fall back to title search
-      searchedRef.current = true;
-      fetchCoverByTitle(title, author).then(url => setSrc(url));
-    } else {
-      setSrc(null);
+  const handleError = () => {
+    if (isbn && src?.includes("/isbn/")) {
+      void fetchCoverByTitle(title, author).then((url) => setFallback({ identity, src: url }));
+      return;
     }
-  }, [title, author]);
+    setFallback({ identity, src: null });
+  };
 
   if (!src) return null;
 
   return (
-    <img
+    <Image
       src={src}
-      alt={title}
+      alt={`Cover of ${title}`}
+      width={size}
+      height={Math.round(size * 1.5)}
       onError={handleError}
       className="rounded object-cover shrink-0"
       style={{ width: size, height: size * 1.5, boxShadow: "0 2px 8px rgba(0,0,0,0.12)" }}

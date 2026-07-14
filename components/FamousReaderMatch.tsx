@@ -1,5 +1,7 @@
 "use client";
 
+import type { DnaProfile } from "@/lib/types";
+import { clamp } from "@/lib/recommendations";
 const READERS = [
   {
     name: "Barack Obama",
@@ -83,7 +85,7 @@ const READERS = [
   },
 ];
 
-function score(dna: any, reader: (typeof READERS)[0]): number {
+function score(dna: DnaProfile, reader: (typeof READERS)[0]): number {
   const d = dna.taste_dimensions || {};
   const u = [
     (d.prose_density     ?? 5) / 10,
@@ -107,10 +109,10 @@ function score(dna: any, reader: (typeof READERS)[0]): number {
     userThemes.some((ut: string) => ut.includes(t) || t.includes(ut))
   ).length;
   const raw = (1 - dist / Math.sqrt(6)) + overlap * 0.04;
-  return Math.round(Math.min(raw, 1) * 100);
+  return Math.round(clamp(raw, 0, 1) * 100);
 }
 
-export default function FamousReaderMatch({ dna }: { dna: any }) {
+export default function FamousReaderMatch({ dna }: { dna: DnaProfile }) {
   const ranked = [...READERS].map(r => ({ ...r, pct: score(dna, r) })).sort((a, b) => b.pct - a.pct);
   const top = ranked[0];
   const runner = ranked[1];
@@ -125,8 +127,11 @@ export default function FamousReaderMatch({ dna }: { dna: any }) {
       }}
     >
       <div className="text-[10px] tracking-[0.2em] uppercase" style={{ color: "rgba(90,138,90,0.65)", fontFamily: "var(--font-geist-mono)" }}>
-        Your reading DNA matches
+        Playful reading DNA comparison
       </div>
+      <p className="text-[10px] -mt-2" style={{ color: "rgba(200,185,160,0.55)" }}>
+        An illustrative similarity based on public reading themes, not a scientific or personal-profile match.
+      </p>
 
       <div className="flex items-start gap-4">
         <div className="text-4xl leading-none mt-1 select-none">{top.emoji}</div>

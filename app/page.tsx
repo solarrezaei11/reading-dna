@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import HimalayanCat from "@/components/HimalayanCat";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+import { api, apiErrorMessage } from "@/lib/api";
+import { createAnalysisInput, validateCsvFile, writeAnalysisInput } from "@/lib/session";
 
 export default function Home() {
   const router = useRouter();
@@ -13,53 +13,67 @@ export default function Home() {
   const [library, setLibrary] = useState("");
   const [dragging, setDragging] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadingSource, setLoadingSource] = useState<"csv" | "rss" | null>(null);
   const [error, setError] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => requestRef.current?.abort(), []);
 
   const handleFile = useCallback(async (file: File) => {
+    const validationError = validateCsvFile(file);
+    if (validationError) {
+      requestRef.current?.abort();
+      setLoading(false);
+      setLoadingSource(null);
+      setError(validationError);
+      return;
+    }
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setLoading(true);
+    setLoadingSource("csv");
     setError("");
     try {
-      const form = new FormData();
-      form.append("file", file);
-      const res = await fetch(`${API}/parse/csv`, { method: "POST", body: form });
-      if (!res.ok) throw new Error("Failed to parse CSV");
-      const data = await res.json();
-      sessionStorage.setItem("books", JSON.stringify(data.books));
-      sessionStorage.setItem("library", library);
+      const data = await api.parseCsv(file, controller.signal);
+      if (!data.books.length) throw new Error("No books were found in that CSV export.");
+      writeAnalysisInput(sessionStorage, createAnalysisInput("csv", {
+        books: data.books, currentlyReading: [], dnf: [], wantToRead: [], library, warnings: data.warnings,
+      }));
       router.push("/analyze");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setError(e instanceof Error && e.message.startsWith("No books") ? e.message : apiErrorMessage(e));
       setLoading(false);
     }
   }, [router, library]);
 
-  const handleRSS = async () => {
+  const handleRSS = useCallback(async () => {
     if (!rssUrl) return;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setLoading(true);
+    setLoadingSource("rss");
     setError("");
     try {
-      const res = await fetch(`${API}/parse/rss`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ profile_url: rssUrl }),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || "Could not fetch RSS — check your profile is public");
-      }
-      const data = await res.json();
-      if (!data.books?.length) throw new Error("No rated books found. Make sure your 'read' shelf is public.");
-      sessionStorage.setItem("books", JSON.stringify(data.books));
-      sessionStorage.setItem("currently_reading", JSON.stringify(data.currently_reading || []));
-      sessionStorage.setItem("dnf", JSON.stringify(data.dnf || []));
-      sessionStorage.setItem("want_to_read", JSON.stringify(data.want_to_read || []));
-      sessionStorage.setItem("library", library);
+      const data = await api.parseRss(rssUrl, controller.signal);
+      if (!data.books.length) throw new Error("No rated books found. Make sure your read shelf is public.");
+      writeAnalysisInput(sessionStorage, createAnalysisInput("rss", {
+        books: data.books,
+        currentlyReading: data.currently_reading ?? [],
+        dnf: data.dnf ?? [],
+        wantToRead: data.want_to_read ?? [],
+        library,
+        warnings: data.warnings,
+      }));
       router.push("/analyze");
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : "Something went wrong");
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setError(e instanceof Error && e.message.startsWith("No rated") ? e.message : apiErrorMessage(e));
       setLoading(false);
     }
-  };
+  }, [library, router, rssUrl]);
 
   const inputCls = [
     "w-full rounded-xl px-4 py-3 text-sm transition-colors focus:outline-none",
@@ -86,7 +100,7 @@ export default function Home() {
             Which AI knows you best as a reader?
           </p>
           <p className="text-sm max-w-xs mx-auto leading-relaxed" style={{ color: "var(--text-3)" }}>
-            Import your Goodreads history. Two AI models compete to recommend books you'll love — you see who wins.
+            Import your Goodreads history. Two AI models compete to recommend books you&apos;ll love — you see who wins.
           </p>
         </div>
 
@@ -104,7 +118,7 @@ export default function Home() {
             {(["rss", "csv"] as const).map((t) => (
               <button
                 key={t}
-                onClick={() => setTab(t)}
+                onClick={() => { setTab(t); setError(""); }}
                 className="flex-1 py-2 text-sm rounded-lg transition-all font-medium"
                 style={
                   tab === t
@@ -151,7 +165,7 @@ export default function Home() {
                 value={rssUrl}
                 onChange={(e) => setRssUrl(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleRSS()}
-                placeholder="goodreads.com/user/show/12345678-name"
+                placeholder="https://www.goodreads.com/user/show/12345678-name"
                 className={inputCls}
                 style={{ background: "var(--surface-2)", borderColor: "var(--border-mid)", color: "var(--text-1)" }}
               />
@@ -180,14 +194,14 @@ export default function Home() {
               type="text"
               value={library}
               onChange={(e) => setLibrary(e.target.value)}
-              placeholder="e.g. Toronto Public Library"
+              placeholder="Toronto Public Library or libbyapp.com/library/toronto"
               className={inputCls}
               style={{ background: "var(--surface-2)", borderColor: "var(--border)", color: "var(--text-1)" }}
             />
           </div>
 
           {error && (
-            <p className="text-sm rounded-xl px-3 py-2.5" style={{ color: "var(--rust)", background: "rgba(176,90,69,0.07)", border: "1px solid rgba(176,90,69,0.18)" }}>
+            <p role="alert" className="text-sm rounded-xl px-3 py-2.5" style={{ color: "var(--rust)", background: "rgba(176,90,69,0.07)", border: "1px solid rgba(176,90,69,0.18)" }}>
               {error}
             </p>
           )}
@@ -215,7 +229,9 @@ export default function Home() {
           <div className="text-center space-y-4">
             <div className="w-8 h-8 rounded-full border-2 border-t-transparent animate-spin mx-auto"
               style={{ borderColor: "var(--sage) transparent var(--sage) var(--sage)" }} />
-            <p className="text-sm" style={{ color: "var(--text-2)" }}>Fetching your shelves…</p>
+            <p className="text-sm" style={{ color: "var(--text-2)" }}>
+              {loadingSource === "csv" ? "Importing your CSV…" : "Fetching your Goodreads shelves…"}
+            </p>
           </div>
         </div>
       )}
