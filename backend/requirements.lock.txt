@@ -30,7 +30,7 @@ numba==0.66.0
 numpy==2.4.6
 packaging==26.2
 pydantic==2.13.4
-pydantic_core==2.46.4
+pydantic_core==2.47.0
 Pygments==2.20.0
 pynndescent==0.6.0
 python-multipart==0.0.32
