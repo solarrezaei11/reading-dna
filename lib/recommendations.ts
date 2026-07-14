@@ -11,6 +11,10 @@ function canonicalize(value: string | undefined): string {
   return (value ?? "").normalize("NFKC").trim().replace(/\s+/g, " ").toLowerCase();
 }
 
+function canonicalizeIsbn(value: string | undefined): string {
+  return canonicalize(value).replace(/-/g, "");
+}
+
 export function recommendationKey(recommendation: Pick<Recommendation, "title" | "author" | "isbn">): string {
   return `${canonicalize(recommendation.title)}|${canonicalize(recommendation.author)}`;
 }
@@ -19,13 +23,18 @@ export function normalizeRecommendations(models: BattleResult["models"]): Normal
   const byKey = new Map<string, NormalizedRecommendation>();
   Object.entries(models).forEach(([model, result]) => {
     result.recommendations.forEach((recommendation) => {
+      if (!canonicalize(recommendation.title)) return;
       const key = recommendationKey(recommendation);
-      if (!key) return;
       const matchedKey = byKey.has(key)
         ? key
         : [...byKey.entries()].find(([, existingRecommendation]) =>
           canonicalize(existingRecommendation.title) === canonicalize(recommendation.title) &&
-          (!canonicalize(existingRecommendation.author) || !canonicalize(recommendation.author)),
+          (!canonicalize(existingRecommendation.author) || !canonicalize(recommendation.author)) &&
+          (
+            !canonicalizeIsbn(existingRecommendation.isbn) ||
+            !canonicalizeIsbn(recommendation.isbn) ||
+            canonicalizeIsbn(existingRecommendation.isbn) === canonicalizeIsbn(recommendation.isbn)
+          ),
         )?.[0];
       const existingKey = matchedKey ?? key;
       const existing = byKey.get(existingKey);

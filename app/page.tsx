@@ -20,6 +20,7 @@ export default function Home() {
   useEffect(() => () => requestRef.current?.abort(), []);
 
   const handleFile = useCallback(async (file: File) => {
+    if (loading) return;
     const validationError = validateCsvFile(file);
     if (validationError) {
       requestRef.current?.abort();
@@ -46,10 +47,10 @@ export default function Home() {
       setError(e instanceof Error && e.message.startsWith("No books") ? e.message : apiErrorMessage(e));
       setLoading(false);
     }
-  }, [router, library]);
+  }, [library, loading, router]);
 
   const handleRSS = useCallback(async () => {
-    if (!rssUrl) return;
+    if (loading || !rssUrl) return;
     requestRef.current?.abort();
     const controller = new AbortController();
     requestRef.current = controller;
@@ -73,7 +74,7 @@ export default function Home() {
       setError(e instanceof Error && e.message.startsWith("No rated") ? e.message : apiErrorMessage(e));
       setLoading(false);
     }
-  }, [library, router, rssUrl]);
+  }, [library, loading, router, rssUrl]);
 
   const inputCls = [
     "w-full rounded-xl px-4 py-3 text-sm transition-colors focus:outline-none",
@@ -141,9 +142,9 @@ export default function Home() {
                 onDragLeave={() => setDragging(false)}
                 onDrop={(e) => {
                   e.preventDefault(); setDragging(false);
-                  const file = e.dataTransfer.files[0]; if (file) handleFile(file);
+                  const file = e.dataTransfer.files[0]; if (!loading && file) handleFile(file);
                 }}
-                className="flex flex-col items-center justify-center gap-3 rounded-xl p-10 cursor-pointer transition-colors"
+                className={`flex flex-col items-center justify-center gap-3 rounded-xl p-10 transition-colors ${loading ? "cursor-not-allowed" : "cursor-pointer"}`}
                 style={{
                   border: `2px dashed ${dragging ? "var(--sage)" : "var(--border-mid)"}`,
                   background: dragging ? "var(--sage-pale)" : "transparent",
@@ -151,7 +152,7 @@ export default function Home() {
               >
                 <span className="text-2xl select-none">📖</span>
                 <span className="text-sm" style={{ color: "var(--text-2)" }}>Drop your CSV here or click to browse</span>
-                <input type="file" accept=".csv" className="hidden"
+                <input type="file" accept=".csv" className="hidden" disabled={loading}
                   onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
               </label>
             </div>

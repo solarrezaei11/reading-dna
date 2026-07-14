@@ -220,13 +220,20 @@ class TopBook(BaseModel):
             raise ValueError("title must not be blank")
         return value
 
-    @field_validator("author", "isbn", mode="before")
+    @field_validator("author", mode="before")
     @classmethod
-    def _strip(cls, v: object) -> str:
-        if v is None:
-            raise ValueError("must be a string")
+    def _strip_author(cls, v: object) -> str:
         if not isinstance(v, str):
-            raise ValueError("must be a string")
+            raise ValueError("author must be a string")
+        return v.strip()
+
+    @field_validator("isbn", mode="before")
+    @classmethod
+    def _strip_isbn(cls, v: object) -> str:
+        if v is None:
+            return ""
+        if not isinstance(v, str):
+            raise ValueError("isbn must be a string or null")
         return v.strip()
 
     @field_validator("why_loved", mode="before")

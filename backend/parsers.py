@@ -407,6 +407,7 @@ def parse_feed(xml_text: str, shelf: str) -> list[dict]:
         pub_year = (item.findtext(gr("book_published"), "") or "").strip()
         rating_text = (item.findtext(gr("user_rating"), "") or "").strip()
         rating = int(rating_text) if rating_text.isdigit() else 0
+        rating = max(0, min(5, rating))
 
         avg_rating_text = (item.findtext(gr("average_rating"), "") or "").strip()
         try:

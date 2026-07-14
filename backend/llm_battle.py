@@ -351,7 +351,7 @@ async def enrich_recommendations_with_isbn(recs: list[dict]) -> list[str]:
     outcomes = await asyncio.gather(*(_resolve_one(k) for k in keys), return_exceptions=True)
 
     warnings: list[str] = []
-    for key, outcome in zip(keys, outcomes):
+    for key, outcome in zip(keys, outcomes, strict=True):
         # Cancellation must never be mistaken for an ordinary lookup failure.
         if isinstance(outcome, asyncio.CancelledError):
             raise outcome
@@ -422,6 +422,15 @@ def build_battle_prompt(
     taste_summary = sanitize_for_prompt(str(dna.get("taste_summary") or ""))
     top_themes = ", ".join(sanitize_for_prompt(str(t)) for t in dna.get("top_themes", []) or [])
     avoid_themes = ", ".join(sanitize_for_prompt(str(t)) for t in dna.get("avoid_themes", []) or [])
+    raw_fiction_ratio = dna.get("taste_dimensions", {}).get("fiction_ratio")
+    fiction_ratio = int(raw_fiction_ratio if raw_fiction_ratio is not None else 50)
+    fiction_preference = (
+        "this reader is primarily a non-fiction reader; strongly prefer non-fiction recommendations"
+        if fiction_ratio < 40
+        else "this reader is primarily a fiction reader; strongly prefer fiction recommendations"
+        if fiction_ratio > 60
+        else "this reader reads a mix of fiction and non-fiction"
+    )
 
     return f"""You are recommending books to a specific reader. Here is their Reading DNA profile:
 
@@ -432,7 +441,7 @@ Themes to avoid: {avoid_themes}
 Prose density preference: {dna.get('taste_dimensions', {}).get('prose_density')}/10
 Pacing preference: {dna.get('taste_dimensions', {}).get('pacing_preference')}/10
 Intellectual depth: {dna.get('taste_dimensions', {}).get('intellectual_depth')}/10
-Fiction ratio: {(fr := int(dna.get('taste_dimensions', {}).get('fiction_ratio') or 50))}% — {"this reader is primarily a non-fiction reader; strongly prefer non-fiction recommendations" if fr < 40 else "this reader is primarily a fiction reader; strongly prefer fiction recommendations" if fr > 60 else "this reader reads a mix of fiction and non-fiction"}
+Fiction ratio: {fiction_ratio}% — {fiction_preference}
 
 Books they've already read — a representative sample across rating levels and recency, up to {BATTLE_SAMPLE_TARGET} of {len(books)} total (do NOT recommend any of these):
 {read_lines}{dnf_note}{cr_note}{tbr_note}
@@ -507,8 +516,9 @@ def validate_and_filter_recommendations(
         try:
             item = RecommendationItem.model_validate(raw)
         except ValidationError as e:
-            first_error = e.errors()[0] if e.errors() else {}
-            warnings.append(f"Dropped an invalid recommendation ({first_error.get('msg', 'validation error')}).")
+            warnings.append(
+                f"Dropped an invalid recommendation ({validation_error_summary(e)})."
+            )
             continue
 
         canonical = canonical_title(item.title)
@@ -602,7 +612,7 @@ async def _call_model_once(model: str, prompt: str, system_prompt: str = "") -> 
     try:
         await call_with_limit(_stream_completion(model, prompt, state, system_prompt=system_prompt), timeout=LLM_ATTEMPT_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
-        raise TimeoutError(f"{model} timed out after {LLM_ATTEMPT_TIMEOUT_SECONDS}s")
+        raise TimeoutError(f"{model} timed out after {LLM_ATTEMPT_TIMEOUT_SECONDS}s") from None
 
     t_end = time.perf_counter()
     ttft = state["ttft"]
@@ -770,7 +780,9 @@ async def run_battle(
 
     results = {}
     battle_warnings: list[str] = []
-    for model_id, (name, recs) in zip(["gpt-oss-120b", "zai-glm-4.7"], models.items()):
+    for model_id, (name, recs) in zip(
+        ["gpt-oss-120b", "zai-glm-4.7"], models.items(), strict=True
+    ):
         info = MODEL_INFO.get(model_id, {})
         # Cancellation must never be mistaken for an ordinary model error —
         # re-raise it so the caller (and asyncio) see the request was
@@ -881,7 +893,7 @@ async def run_judge(dna: dict, battle_results: dict) -> dict:
     labels = [f"Recommender {chr(ord('A') + index)}" for index in range(len(eligible_names))]
     order = list(eligible_names)
     random.shuffle(order)  # randomize which model gets which anonymized label, so the judge can't infer identity from label order
-    label_for_model = dict(zip(order, labels))
+    label_for_model = dict(zip(order, labels, strict=True))
     model_for_label = {label: name for name, label in label_for_model.items()}
 
     recs_by_label = {
@@ -894,7 +906,7 @@ async def run_judge(dna: dict, battle_results: dict) -> dict:
         return_exceptions=True,
     )
 
-    for label, verdict in zip(labels, verdicts):
+    for label, verdict in zip(labels, verdicts, strict=True):
         model_name = model_for_label[label]
 
         # Cancellation must never be mistaken for an ordinary judge error —
@@ -972,9 +984,8 @@ async def run_judge(dna: dict, battle_results: dict) -> dict:
     else:
         raise RuntimeError(f"Judge returned no usable scores for either recommender: {errors}")
 
-    # winner is constructed only from model_names (the two known recommender
-    # display names) or is None — never any other value.
-    assert winner is None or winner in model_names, "winner must be one of the two recommenders or None"
+    if winner is not None and winner not in model_names:
+        raise RuntimeError("Judge selected an unknown recommender.")
 
     result: dict = {
         "judge": judge_results,

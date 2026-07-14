@@ -22,6 +22,7 @@ import json
 import logging
 from typing import Optional
 
+from cerebras.cloud.sdk import CerebrasError
 from pydantic import ValidationError
 
 from config import MAX_REVIEW_EXCERPT_CHARS
@@ -241,6 +242,10 @@ async def build_dna_profile(
         )
     except asyncio.TimeoutError:
         raise RuntimeError("Reading DNA generation timed out waiting for the LLM.") from None
+    except CerebrasError as exc:
+        summary = safe_exception_summary(exc)
+        logger.warning("Reading DNA LLM call failed: %s", summary)
+        raise RuntimeError(f"Reading DNA generation failed ({summary}).") from None
     text = resp.choices[0].message.content.strip()
     try:
         profile = _extract_json_object(text)
@@ -273,9 +278,13 @@ async def build_dna_profile(
         dims["contrarian_score"] = None
 
     # Enrich top_books with real ISBNs from actual Goodreads data (LLM doesn't know these)
-    isbn_map = {b["title"].lower(): b.get("isbn", "") for b in books if b.get("isbn")}
+    isbn_map = {
+        str(b.get("title") or "").strip().casefold(): b.get("isbn", "")
+        for b in books
+        if b.get("isbn") and str(b.get("title") or "").strip()
+    }
     for tb in validated_profile["top_books"]:
-        real_isbn = isbn_map.get(str(tb.get("title", "")).lower(), "")
+        real_isbn = isbn_map.get(str(tb.get("title") or "").strip().casefold(), "")
         if real_isbn:
             tb["isbn"] = real_isbn
 

@@ -32,7 +32,7 @@ export function BookCover({
   author?: string;
   size?: number;
 }) {
-  const identity = `${isbn ?? ""}|${title}|${author ?? ""}`;
+  const identity = JSON.stringify([isbn ?? "", title, author ?? ""]);
   const [fallback, setFallback] = useState<{ identity: string; src: string | null } | null>(null);
   const isbnCover = isbn ? `https://covers.openlibrary.org/b/isbn/${encodeURIComponent(isbn)}-M.jpg?default=false` : null;
   const src = fallback?.identity === identity ? fallback.src : isbnCover;

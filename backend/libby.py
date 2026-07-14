@@ -403,7 +403,13 @@ def match_library(libraries: list[dict], query: str) -> tuple[Optional[dict], li
     normalized_names = [_normalize_name(n) for n in names]
     close = difflib.get_close_matches(q_norm, normalized_names, n=5, cutoff=0.72)
     if close:
-        candidates = [libraries[normalized_names.index(cn)] for cn in close]
+        indices_by_name: dict[str, list[int]] = {}
+        for index, normalized_name in enumerate(normalized_names):
+            indices_by_name.setdefault(normalized_name, []).append(index)
+        candidates = [
+            libraries[indices_by_name[normalized_name].pop(0)]
+            for normalized_name in close
+        ]
         if len(candidates) == 1:
             return candidates[0], []
         return None, candidates

@@ -32,6 +32,13 @@ def _env_int(name: str, default: int) -> int:
         raise ConfigError(f"Environment variable {name}={raw!r} is not a valid integer.") from None
 
 
+def _env_int_with_alias(name: str, alias: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is not None and raw.strip():
+        return _env_int(name, default)
+    return _env_int(alias, default)
+
+
 def _env_float(name: str, default: float) -> float:
     raw = os.environ.get(name)
     if raw is None or not raw.strip():
@@ -60,6 +67,12 @@ def _env_bool(name: str, default: bool) -> bool:
 def _require_positive_int(name: str, value: int) -> int:
     if value <= 0:
         raise ConfigError(f"{name} must be a positive integer, got {value}.")
+    return value
+
+
+def _require_nonnegative_int(name: str, value: int) -> int:
+    if value < 0:
+        raise ConfigError(f"{name} must be a non-negative integer, got {value}.")
     return value
 
 
@@ -126,7 +139,7 @@ LIBBY_CATALOG_FETCH_CONCURRENCY = _require_positive_int(
 # and map/embeddings cluster naming) via a single shared semaphore in
 # llm_client.py. LLM_CONCURRENCY is accepted as a legacy alias.
 MAX_LLM_CONCURRENCY = _require_positive_int(
-    "MAX_LLM_CONCURRENCY", _env_int("MAX_LLM_CONCURRENCY", _env_int("LLM_CONCURRENCY", 4))
+    "MAX_LLM_CONCURRENCY", _env_int_with_alias("MAX_LLM_CONCURRENCY", "LLM_CONCURRENCY", 4)
 )
 CPU_ANALYSIS_CONCURRENCY = _require_positive_int("CPU_ANALYSIS_CONCURRENCY", _env_int("CPU_ANALYSIS_CONCURRENCY", 2))
 LLM_ATTEMPT_TIMEOUT_SECONDS = _require_positive_float(
@@ -138,6 +151,12 @@ RATE_LIMIT_WINDOW_SECONDS = _require_positive_float(
     "RATE_LIMIT_WINDOW_SECONDS", _env_float("RATE_LIMIT_WINDOW_SECONDS", 60.0)
 )
 RATE_LIMIT_MAX_REQUESTS = _require_positive_int("RATE_LIMIT_MAX_REQUESTS", _env_int("RATE_LIMIT_MAX_REQUESTS", 20))
+# Zero (default) ignores forwarded headers. Set this only when direct access
+# to the backend is restricted to a trusted proxy chain that appends or
+# replaces X-Forwarded-For at every hop.
+RATE_LIMIT_TRUSTED_PROXY_HOPS = _require_nonnegative_int(
+    "RATE_LIMIT_TRUSTED_PROXY_HOPS", _env_int("RATE_LIMIT_TRUSTED_PROXY_HOPS", 0)
+)
 # How often (wall-clock seconds) each limiter sweeps its per-key dict for
 # fully-expired keys (client/route combinations with no hits inside the
 # current window). This is a *periodic* sweep, not a per-request one — a

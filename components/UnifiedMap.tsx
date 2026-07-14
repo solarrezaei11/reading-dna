@@ -71,7 +71,14 @@ function MapCanvas({
 
   const clusters = useMemo<Cluster[]>(() => {
     const grouped = new Map<number, MapPoint[]>();
-    mapData.points.forEach((point) => grouped.set(point.cluster_id, [...(grouped.get(point.cluster_id) ?? []), point]));
+    mapData.points.forEach((point) => {
+      const books = grouped.get(point.cluster_id);
+      if (books) {
+        books.push(point);
+      } else {
+        grouped.set(point.cluster_id, [point]);
+      }
+    });
     return [...grouped.entries()].map(([id, books]) => ({
       id,
       name: books[0]?.cluster_name ?? `Cluster ${id + 1}`,
@@ -84,10 +91,10 @@ function MapCanvas({
   useEffect(() => {
     const element = containerRef.current;
     if (!element) return;
-    const update = () => setWidth((current) => {
+    const update = () => {
       const next = Math.floor(element.getBoundingClientRect().width);
-      return next > 0 && next !== current ? next : current;
-    });
+      setWidth((current) => next > 0 && next !== current ? next : current);
+    };
     update();
     if (!("ResizeObserver" in window)) return;
     const observer = new ResizeObserver(update);

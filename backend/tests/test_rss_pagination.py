@@ -35,6 +35,15 @@ def _books(n: int, start: int = 0, **kwargs) -> list[dict]:
     return [{"title": f"Book {start + i}", "isbn": f"{9780000000000 + start + i}", **kwargs} for i in range(n)]
 
 
+class ParseFeedValidationTests(unittest.TestCase):
+    def test_rating_above_goodreads_scale_is_clamped(self):
+        parsed = parsers.parse_feed(
+            _rss_xml([{"title": "Outlier Rating", "rating": 6}]),
+            shelf="read",
+        )
+        self.assertEqual(parsed[0]["my_rating"], 5)
+
+
 class FetchShelfPaginatedTests(unittest.IsolatedAsyncioTestCase):
     async def test_stops_on_short_page_no_warning(self):
         # Page 1 full (per_page items), page 2 short => natural exhaustion, no warning needed.

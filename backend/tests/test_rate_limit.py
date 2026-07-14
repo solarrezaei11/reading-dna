@@ -2,8 +2,9 @@
 import unittest
 
 from fastapi import HTTPException
+from starlette.requests import Request
 
-from rate_limit import SlidingWindowRateLimiter
+from rate_limit import SlidingWindowRateLimiter, client_key
 
 
 class SlidingWindowRateLimiterTests(unittest.IsolatedAsyncioTestCase):
@@ -85,6 +86,57 @@ class SlidingWindowRateLimiterTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertIn("client-a", limiter._hits)
         self.assertEqual(len(limiter._hits["client-a"]), 2)
+
+
+class ClientKeyTests(unittest.TestCase):
+    @staticmethod
+    def _request(
+        peer: str = "10.0.0.10",
+        forwarded_for: str | None = None,
+    ) -> Request:
+        headers = []
+        if forwarded_for is not None:
+            headers.append((b"x-forwarded-for", forwarded_for.encode("ascii")))
+        return Request(
+            {
+                "type": "http",
+                "method": "GET",
+                "path": "/dna",
+                "query_string": b"",
+                "headers": headers,
+                "client": (peer, 12345),
+                "server": ("testserver", 80),
+                "scheme": "http",
+            }
+        )
+
+    def test_forwarded_header_is_ignored_by_default(self):
+        request = self._request(forwarded_for="198.51.100.20")
+        self.assertEqual(client_key(request, trusted_proxy_hops=0), "10.0.0.10")
+
+    def test_fixed_hop_count_selects_from_trusted_right_side(self):
+        request = self._request(
+            forwarded_for="192.0.2.1, 198.51.100.20, 203.0.113.30"
+        )
+        self.assertEqual(
+            client_key(request, trusted_proxy_hops=2),
+            "198.51.100.20",
+        )
+
+    def test_untrusted_prefix_cannot_change_one_hop_selection(self):
+        request = self._request(
+            forwarded_for="192.0.2.99, 198.51.100.20"
+        )
+        self.assertEqual(
+            client_key(request, trusted_proxy_hops=1),
+            "198.51.100.20",
+        )
+
+    def test_invalid_or_short_forwarded_chain_falls_back_to_peer(self):
+        invalid = self._request(forwarded_for="not-an-ip")
+        short = self._request(forwarded_for="198.51.100.20")
+        self.assertEqual(client_key(invalid, trusted_proxy_hops=1), "10.0.0.10")
+        self.assertEqual(client_key(short, trusted_proxy_hops=2), "10.0.0.10")
 
 
 if __name__ == "__main__":

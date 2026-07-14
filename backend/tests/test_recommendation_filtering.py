@@ -119,6 +119,17 @@ class ValidateAndFilterRecommendationsTests(unittest.TestCase):
         self.assertEqual(result[0]["title"], "Has Title")
         self.assertTrue(any("invalid recommendation" in w for w in warnings))
 
+    def test_invalid_recommendation_warning_uses_sanitized_summary(self):
+        result, warnings = llm_battle.validate_and_filter_recommendations(
+            [{"title": "", "author": "Private Author"}],
+            exclude_index={},
+        )
+        warning = " ".join(warnings)
+        self.assertEqual(result, [])
+        self.assertIn("issue(s)", warning)
+        self.assertNotIn("title must not be blank", warning)
+        self.assertNotIn("Private Author", warning)
+
     def test_dedupes_same_book_but_keeps_same_title_by_different_author(self):
         raw = [
             {"title": "The Hobbit", "author": "Tolkien"},
@@ -141,6 +152,25 @@ class ValidateAndFilterRecommendationsTests(unittest.TestCase):
         )
         self.assertEqual(len(result), 1)
         self.assertTrue(result[0]["on_tbr"])
+
+
+class BuildBattlePromptTests(unittest.TestCase):
+    def test_zero_fiction_ratio_remains_zero_and_nonfiction(self):
+        dna_profile = {
+            "reader_archetype": "Nonfiction Reader",
+            "taste_summary": "Reads history.",
+            "top_themes": ["history"],
+            "avoid_themes": [],
+            "taste_dimensions": {
+                "prose_density": 5,
+                "pacing_preference": 5,
+                "intellectual_depth": 8,
+                "fiction_ratio": 0,
+            },
+        }
+        prompt = llm_battle.build_battle_prompt(dna_profile, [])
+        self.assertIn("Fiction ratio: 0%", prompt)
+        self.assertIn("primarily a non-fiction reader", prompt)
 
     def test_filters_out_already_read_current_dnf_or_tbr_titles(self):
         raw = [

@@ -61,6 +61,36 @@ describe("recommendation normalization", () => {
     expect(recommendations[0].isConsensus).toBe(true);
   });
 
+  test("skips blank recommendations instead of creating false consensus", () => {
+    const recommendations = normalizeRecommendations({
+      "Model A": { recommendations: [{ title: "", author: "" }] },
+      "Model B": { recommendations: [{ title: "   ", author: "Someone" }] },
+    });
+
+    expect(recommendations).toEqual([]);
+  });
+
+  test("keeps same-title missing-author recommendations separate when ISBNs conflict", () => {
+    const recommendations = normalizeRecommendations({
+      "Model A": {
+        recommendations: [{
+          title: "Home", author: "Marilynne Robinson", isbn: "9780374299101",
+        }],
+      },
+      "Model B": {
+        recommendations: [{
+          title: "Home", author: "", isbn: "9780000000002",
+        }],
+      },
+    });
+
+    expect(recommendations).toHaveLength(2);
+    expect(recommendations.map((recommendation) => recommendation.isbn)).toEqual([
+      "9780374299101",
+      "9780000000002",
+    ]);
+  });
+
   test("omits unmatched map recommendations instead of borrowing another book's coordinates", () => {
     const normalized = normalizeRecommendations({
       "Model A": { recommendations: [{ title: "Unmapped", author: "Author" }] },

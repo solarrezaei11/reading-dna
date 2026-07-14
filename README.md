@@ -235,6 +235,10 @@ For a hosted deployment:
    command appropriate for the hosting platform.
 6. Put multi-instance deployments behind a shared rate limiter if a global
    limit is required. The built-in limiter and caches are process-local.
+7. Leave `RATE_LIMIT_TRUSTED_PROXY_HOPS=0` unless direct backend access is
+   restricted to a known proxy chain. When enabled, set it to the fixed
+   number of trusted hops that append or replace `X-Forwarded-For`; untrusted
+   forwarded prefixes are ignored by selecting from the right side.
 
 The optional bearer token is a deployment-wide control, not user
 authentication or multi-tenant authorization. A browser cannot keep a shared

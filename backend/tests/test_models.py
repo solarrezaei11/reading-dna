@@ -53,6 +53,21 @@ class StrictModelTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             DnaProfile.model_validate({"reader_archetype": "Reader", "taste_dimensions": {}})
 
+    def test_dna_profile_normalizes_null_top_book_isbn(self):
+        payload = {
+            **self.VALID_DNA,
+            "top_books": [
+                {
+                    "title": "A Book",
+                    "author": "An Author",
+                    "why_loved": "It fits.",
+                    "isbn": None,
+                }
+            ],
+        }
+        profile = DnaProfile.model_validate(payload)
+        self.assertEqual(profile.top_books[0].isbn, "")
+
     def test_recommendation_rejects_unknown_fields(self):
         with self.assertRaises(ValidationError):
             RecommendationItem.model_validate({"title": "Book", "surprise": "value"})

@@ -122,7 +122,7 @@ class _LRUEmbeddingCache:
 
     async def put_many(self, texts: list[str], vectors) -> None:
         async with self._lock:
-            for t, v in zip(texts, vectors):
+            for t, v in zip(texts, vectors, strict=True):
                 key = self._key(t)
                 self._store[key] = np.asarray(v)
                 self._store.move_to_end(key)
@@ -282,7 +282,7 @@ async def _fit_kmeans(normalized_book_embs: np.ndarray, n_clusters: int) -> list
 
         km = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
         labels = km.fit_predict(normalized_book_embs)
-        return [int(l) for l in labels]
+        return [int(label) for label in labels]
 
     async with _cpu_semaphore:
         return await asyncio.to_thread(_fit)
@@ -291,7 +291,13 @@ async def _fit_kmeans(normalized_book_embs: np.ndarray, n_clusters: int) -> list
 async def generate_embeddings_and_umap(books: list[dict], recommendations: Optional[list[dict]] = None) -> dict:
     recommendations = recommendations or []
     if not books:
-        return {"points": [], "genre_anchors": [], "rec_points": [], "warnings": []}
+        return {
+            "points": [],
+            "genre_anchors": [],
+            "rec_points": [],
+            "cluster_names": {},
+            "warnings": [],
+        }
 
     # Sort books deterministically so UMAP layout is stable across runs
     # (Goodreads RSS order varies between requests, which shifts UMAP output)

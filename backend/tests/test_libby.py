@@ -91,6 +91,18 @@ class MatchLibraryTests(unittest.TestCase):
         self.assertIsNotNone(match)
         self.assertEqual(match["preferredKey"], "multcolib")
 
+    def test_fuzzy_match_preserves_distinct_libraries_with_same_name(self):
+        catalog = [
+            {"name": "Springfield Public Library", "preferredKey": "springfield-one"},
+            {"name": "Springfield Public Library", "preferredKey": "springfield-two"},
+        ]
+        match, alts = libby.match_library(catalog, "Springfeld Public Library")
+        self.assertIsNone(match)
+        self.assertEqual(
+            [library["preferredKey"] for library in alts],
+            ["springfield-one", "springfield-two"],
+        )
+
     def test_unicode_name_matching_folds_diacritics(self):
         catalog = [{"name": "Bibliothèque de Montréal", "preferredKey": "montreal"}]
         match, alts = libby.match_library(catalog, "Bibliotheque de Montreal")

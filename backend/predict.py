@@ -125,7 +125,7 @@ def build_predict_prompt(dna: dict, candidate: dict, neighbors: list[dict], avg_
         if n["my_rating"]
     )
     subjects = ", ".join(sanitize_for_prompt(str(s)) for s in candidate.get("subjects", [])) or "unknown"
-    year = candidate.get("year") or "unknown"
+    year = sanitize_for_prompt(str(candidate.get("year") or "")) or "unknown"
     archetype = sanitize_for_prompt(str(dna.get("reader_archetype") or ""))
     taste_summary = sanitize_for_prompt(str(dna.get("taste_summary") or ""))
     top_themes = ", ".join(sanitize_for_prompt(str(t)) for t in dna.get("top_themes", []) or [])

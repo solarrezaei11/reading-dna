@@ -193,6 +193,26 @@ class DnaRawOutputValidationTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             await self._build_with_profile(profile)
 
+    async def test_cerebras_failure_is_sanitized_and_wrapped(self):
+        fake_client = SimpleNamespace(
+            chat=SimpleNamespace(
+                completions=SimpleNamespace(create=lambda **kwargs: object())
+            )
+        )
+        books = _make_books(4, 4)
+        private_message = "private upstream request details"
+        with mock.patch.object(dna, "_get_client", return_value=fake_client), \
+             mock.patch.object(
+                 dna,
+                 "call_with_limit",
+                 new=mock.AsyncMock(side_effect=dna.CerebrasError(private_message)),
+             ):
+            with self.assertRaises(RuntimeError) as ctx:
+                await dna.build_dna_profile(books)
+
+        self.assertIn("CerebrasError", str(ctx.exception))
+        self.assertNotIn(private_message, str(ctx.exception))
+
 
 if __name__ == "__main__":
     unittest.main()

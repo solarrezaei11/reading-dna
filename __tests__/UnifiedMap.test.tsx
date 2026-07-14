@@ -106,4 +106,26 @@ describe("UnifiedMap recommendation list", () => {
 
     expect(screen.getByText("The judge scored this as a tie.")).toBeInTheDocument();
   });
+
+  test("shows when a partial judge result cannot select a winner", () => {
+    render(
+      <UnifiedMap
+        mapData={null}
+        battle={{
+          models: {
+            "Model A": { recommendations: [{ title: "Book A" }] },
+            "Model B": { recommendations: [{ title: "Book B" }] },
+          },
+          judge: {
+            "Model A": { scores: { relevance: 8 }, verdict: "Good fit." },
+            "Model B": { error: "Judge unavailable" },
+          },
+          winner: null,
+          tie: false,
+        }}
+      />,
+    );
+
+    expect(screen.getByText("The judge did not select a winner.")).toBeInTheDocument();
+  });
 });

@@ -181,7 +181,16 @@ class GenerateEmbeddingsWarningsPropagationTests(unittest.IsolatedAsyncioTestCas
 
     async def test_empty_books_returns_empty_shape_with_no_warnings(self):
         result = await embeddings.generate_embeddings_and_umap([])
-        self.assertEqual(result, {"points": [], "genre_anchors": [], "rec_points": [], "warnings": []})
+        self.assertEqual(
+            result,
+            {
+                "points": [],
+                "genre_anchors": [],
+                "rec_points": [],
+                "cluster_names": {},
+                "warnings": [],
+            },
+        )
 
 
 if __name__ == "__main__":

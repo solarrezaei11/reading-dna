@@ -7,12 +7,14 @@ keep the dependency footprint unchanged.
 import asyncio
 import time
 from collections import defaultdict, deque
+from ipaddress import ip_address
 
 from fastapi import HTTPException, Request
 
 from config import (
     RATE_LIMIT_CLEANUP_INTERVAL_SECONDS,
     RATE_LIMIT_MAX_REQUESTS,
+    RATE_LIMIT_TRUSTED_PROXY_HOPS,
     RATE_LIMIT_WINDOW_SECONDS,
 )
 
@@ -88,11 +90,31 @@ class SlidingWindowRateLimiter:
             del self._hits[k]
 
 
-def client_key(request: Request) -> str:
-    """Best-effort client identifier for rate limiting (no auth in this app)."""
-    if request.client:
-        return request.client.host
-    return "unknown"
+def client_key(
+    request: Request,
+    trusted_proxy_hops: int = RATE_LIMIT_TRUSTED_PROXY_HOPS,
+) -> str:
+    """Return a rate-limit key without trusting caller-controlled headers.
+
+    Forwarded addresses are considered only when a deployment explicitly
+    configures a fixed number of trusted proxy hops. Selecting from the
+    right side prevents untrusted prefixes from changing the chosen client.
+    Direct access must be blocked whenever this option is enabled.
+    """
+    peer = request.client.host.strip() if request.client and request.client.host else ""
+    if trusted_proxy_hops > 0:
+        forwarded = [
+            value.strip()
+            for value in request.headers.get("x-forwarded-for", "").split(",")
+            if value.strip()
+        ]
+        if len(forwarded) >= trusted_proxy_hops:
+            candidate = forwarded[-trusted_proxy_hops]
+            try:
+                return str(ip_address(candidate))
+            except ValueError:
+                pass
+    return peer or "unknown"
 
 
 # Shared limiter instances for expensive endpoints. Each endpoint gets its own

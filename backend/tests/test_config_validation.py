@@ -117,6 +117,19 @@ class ConfigModuleReloadFailFastTests(unittest.TestCase):
             importlib.reload(config)
             self.assertEqual(config.MAX_COLLECTION_SIZE, 42)
 
+    def test_primary_llm_concurrency_ignores_malformed_legacy_alias(self):
+        with mock.patch.dict(
+            os.environ,
+            {"MAX_LLM_CONCURRENCY": "6", "LLM_CONCURRENCY": "stale-value"},
+        ):
+            importlib.reload(config)
+            self.assertEqual(config.MAX_LLM_CONCURRENCY, 6)
+
+    def test_negative_trusted_proxy_hops_fails_import(self):
+        with mock.patch.dict(os.environ, {"RATE_LIMIT_TRUSTED_PROXY_HOPS": "-1"}):
+            with self.assertRaises(ValueError):
+                importlib.reload(config)
+
     def test_backend_access_token_defaults_to_none_and_trims_whitespace(self):
         with mock.patch.dict(os.environ, {}, clear=False):
             os.environ.pop("BACKEND_ACCESS_TOKEN", None)

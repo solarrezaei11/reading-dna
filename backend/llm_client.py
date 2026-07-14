@@ -24,17 +24,32 @@ T = TypeVar("T")
 
 # Single process-wide semaphore bounding every outbound LLM call.
 LLM_SEMAPHORE = asyncio.Semaphore(MAX_LLM_CONCURRENCY)
+_tracked_semaphore = LLM_SEMAPHORE
+_semaphore_loop: asyncio.AbstractEventLoop | None = None
 
 
 def _semaphore_for_current_loop() -> asyncio.Semaphore:
     """Reuse the process semaphore, rebuilding it only after its old event
     loop has closed (common in isolated async tests and safe because that
     loop can no longer have live work). Production normally has one loop."""
-    global LLM_SEMAPHORE
+    global LLM_SEMAPHORE, _tracked_semaphore, _semaphore_loop
     current_loop = asyncio.get_running_loop()
-    bound_loop = getattr(LLM_SEMAPHORE, "_loop", None)
-    if bound_loop is not None and bound_loop is not current_loop and bound_loop.is_closed():
+
+    # Tests may replace the public semaphore with a local instance. Track
+    # that identity change without reaching into asyncio's private `_loop`.
+    if LLM_SEMAPHORE is not _tracked_semaphore:
+        _tracked_semaphore = LLM_SEMAPHORE
+        _semaphore_loop = current_loop
+        return LLM_SEMAPHORE
+
+    if _semaphore_loop is None:
+        _semaphore_loop = current_loop
+    elif _semaphore_loop is not current_loop:
+        if not _semaphore_loop.is_closed():
+            raise RuntimeError("The shared LLM semaphore is active on another event loop.")
         LLM_SEMAPHORE = asyncio.Semaphore(MAX_LLM_CONCURRENCY)
+        _tracked_semaphore = LLM_SEMAPHORE
+        _semaphore_loop = current_loop
     return LLM_SEMAPHORE
 
 
