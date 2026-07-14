@@ -1,8 +1,9 @@
 import { MetadataRoute } from "next";
+import { siteUrl } from "@/lib/site";
 
 export default function robots(): MetadataRoute.Robots {
   return {
     rules: { userAgent: "*", allow: "/", disallow: "/analyze" },
-    sitemap: "https://readingdna.vercel.app/sitemap.xml",
+    sitemap: new URL("/sitemap.xml", siteUrl()).toString(),
   };
 }

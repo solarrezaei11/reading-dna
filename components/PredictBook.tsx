@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BookCover } from "./BookCover";
+import { api, apiErrorMessage } from "@/lib/api";
+import { clamp } from "@/lib/recommendations";
+import type { Book, DnaProfile, PredictResponse, Prediction } from "@/lib/types";
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
-
-type Props = { dna: any; books: any[] };
+type Props = { dna: DnaProfile; books: Book[] };
 
 function Stars({ value }: { value: number }) {
   return (
@@ -18,40 +19,34 @@ function Stars({ value }: { value: number }) {
 
 export default function PredictBook({ dna, books }: Props) {
   const [title, setTitle] = useState("");
+  const [author, setAuthor] = useState("");
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<PredictResponse | null>(null);
   const [error, setError] = useState("");
+  const requestRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => requestRef.current?.abort(), []);
 
   async function predict() {
     const q = title.trim();
     if (!q || loading) return;
+    requestRef.current?.abort();
+    const controller = new AbortController();
+    requestRef.current = controller;
     setLoading(true);
     setError("");
     setResult(null);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 60_000);
     try {
-      const res = await fetch(`${API}/predict`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: q, dna_profile: dna, books }),
-        signal: controller.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      setResult(await res.json());
+      setResult(await api.predict(q, author.trim() || undefined, dna, books, controller.signal));
     } catch (e: unknown) {
-      setError(
-        e instanceof Error && e.name === "AbortError"
-          ? "Prediction timed out — try again."
-          : "Prediction failed — is the backend running?"
-      );
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      setError(apiErrorMessage(e));
     } finally {
-      clearTimeout(timeout);
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }
 
-  const models: [string, any][] = result?.predictions ? Object.entries(result.predictions) : [];
+  const models: Array<[string, Prediction]> = result?.predictions ? Object.entries(result.predictions) : [];
   const ratings = models
     .map(([, p]) => p.predicted_rating)
     .filter((r): r is number => typeof r === "number");
@@ -75,7 +70,7 @@ export default function PredictBook({ dna, books }: Props) {
         </p>
       </div>
 
-      <div className="flex gap-2">
+      <div className="grid grid-cols-1 sm:grid-cols-[minmax(0,1fr)_minmax(0,0.7fr)_auto] gap-2">
         <input
           value={title}
           onChange={(e) => setTitle(e.target.value)}
@@ -83,6 +78,21 @@ export default function PredictBook({ dna, books }: Props) {
           placeholder="e.g. The Remains of the Day"
           aria-label="Book title to predict"
           className="flex-1 min-w-0 rounded-xl px-3.5 py-2 text-sm outline-none transition-colors"
+          style={{
+            background: "var(--bg)",
+            border: "1px solid var(--border-mid)",
+            color: "var(--text-1)",
+          }}
+          onFocus={(e) => (e.currentTarget.style.borderColor = "var(--sage)")}
+          onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border-mid)")}
+        />
+        <input
+          value={author}
+          onChange={(e) => setAuthor(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && predict()}
+          placeholder="Author (optional)"
+          aria-label="Book author to disambiguate prediction"
+          className="min-w-0 rounded-xl px-3.5 py-2 text-sm outline-none transition-colors"
           style={{
             background: "var(--bg)",
             border: "1px solid var(--border-mid)",
@@ -113,6 +123,12 @@ export default function PredictBook({ dna, books }: Props) {
 
       {error && (
         <p className="text-xs" style={{ color: "var(--rust)" }}>{error}</p>
+      )}
+
+      {(result?.warnings?.length ?? 0) > 0 && (
+        <p role="status" className="rounded-xl px-3 py-2 text-xs" style={{ color: "var(--text-2)", background: "var(--surface-2)", border: "1px solid var(--border)" }}>
+          {[...new Set(result?.warnings ?? [])].join(" ")}
+        </p>
       )}
 
       {result?.already_read && (
@@ -175,18 +191,18 @@ export default function PredictBook({ dna, books }: Props) {
                         <div className="flex-1 h-1 rounded-full overflow-hidden" style={{ background: "var(--border)" }}>
                           <div
                             className="h-full rounded-full"
-                            style={{ width: `${Math.round(p.confidence * 100)}%`, background: "var(--sage)" }}
+                            style={{ width: `${Math.round(clamp(p.confidence, 0, 1) * 100)}%`, background: "var(--sage)" }}
                           />
                         </div>
                         <span className="text-[10px] tabular-nums" style={{ color: "var(--text-3)" }}>
-                          {Math.round(p.confidence * 100)}%
+                          {Math.round(clamp(p.confidence, 0, 1) * 100)}%
                         </span>
                       </div>
                     )}
                     <p className="text-xs leading-relaxed" style={{ color: "var(--text-2)" }}>{p.why}</p>
                     {(p.drivers || []).length > 0 && (
                       <div className="flex flex-wrap gap-1.5 pt-0.5">
-                        {p.drivers.map((d: any, i: number) => (
+                        {p.drivers?.map((d, i) => (
                           <span
                             key={i}
                             className="text-[10px] px-2 py-0.5 rounded-full"
@@ -225,7 +241,7 @@ export default function PredictBook({ dna, books }: Props) {
                 Closest books on your shelf
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {result.neighbors.map((n: any, i: number) => (
+                {result.neighbors?.map((n, i) => (
                   <span
                     key={i}
                     className="text-[11px] px-2.5 py-1 rounded-full"

@@ -1,51 +1,84 @@
 import os
-import sys
 import json
 import time
 import uuid
 import asyncio
+import logging
 import numpy as np
-import httpx
+from pydantic import ValidationError
 
+from config import ENABLE_PREDICTION_LOG
 from embeddings import embed_texts, book_to_text
-from llm_battle import call_model, MODEL_INFO
+from error_safety import safe_exception_summary, validation_error_summary
+from llm_battle import _authors_plausibly_match, call_model, canonical_title, MODEL_INFO
+from models import PredictionResponse
+from open_library import lookup_open_library
+from prompt_safety import guarded_system_prompt, sanitize_for_prompt
+
+logger = logging.getLogger(__name__)
 
 PREDICTIONS_LOG = os.path.join(os.path.dirname(__file__), "predictions.jsonl")
 
 MODELS = ["gpt-oss-120b", "zai-glm-4.7"]
 
+# A dedicated, guarded system prompt for rating-prediction calls — distinct
+# from the recommender's system prompt (which talks about *recommending*
+# books, not predicting a rating for one specific book), so this task gets
+# instructions matched to what it's actually being asked to do.
+PREDICTION_SYSTEM_PROMPT = guarded_system_prompt(
+    "You are an expert at predicting how much a specific reader will enjoy a specific book, "
+    "based on their reading history and taste profile. Always respond with valid JSON only, no markdown."
+)
 
-async def resolve_book(title: str, author: str | None = None) -> dict | None:
-    """Look up the book on Open Library to get author, year, subjects, ISBN, cover."""
-    params = {
-        "title": title,
-        "limit": "1",
-        "fields": "title,author_name,first_publish_year,subject,isbn,cover_i",
-    }
+
+async def resolve_book(title: str, author: str | None = None) -> tuple[dict | None, str | None]:
+    """Look up the book on Open Library to get author, year, subjects, ISBN, cover.
+
+    Thin wrapper around the shared open_library.lookup_open_library (also
+    used by llm_battle.py to verify/enrich recommendation ISBNs), preserved
+    here under its original name/shape so existing call sites and tests are
+    unaffected.
+
+    Returns (candidate_or_None, warning_or_None). A warning distinguishes an
+    Open Library outage or malformed response from a legitimate no-match: an
+    empty `docs` list is a normal "not found" (no warning), while a network
+    error or an unexpected response shape means we couldn't actually check —
+    the caller falls back to unresolved metadata either way, but only the
+    latter should surface as a warning.
+    """
+    candidate, warning = await lookup_open_library(title=title, author=author, timeout=15.0)
+    if warning:
+        return None, f"{warning}; using unresolved book metadata."
+    if candidate and not candidate.get("author") and author:
+        # Prediction display can retain the user's queried author, but the
+        # shared lookup itself keeps missing author evidence empty so ISBN
+        # verification never treats query text as an independent match.
+        candidate = {**candidate, "author": author}
+    return candidate, None
+
+
+def find_already_read(title: str, books: list[dict], author: str | None = None) -> dict | None:
+    """Check whether `title` is already on the user's shelf.
+
+    When the caller supplies an `author` (now sent by the frontend), match
+    on a canonical title equality *and* a plausible author match — this
+    disambiguates books that share an ambiguous/common title (e.g. more than
+    one novel titled "Evelina" or "Circe") rather than conflating them with
+    whatever same-titled book happens to be on the shelf. `_authors_plausibly_match`
+    is deliberately lenient about formatting ("J.R.R. Tolkien" vs "Tolkien, J. R. R.")
+    so it only rules out books that are clearly by a different author.
+
+    Falls back to the original title-only (substring-tolerant) matching only
+    when no author was provided, preserving prior behavior for callers/tests
+    that don't have one.
+    """
     if author:
-        params["author"] = author
-    try:
-        async with httpx.AsyncClient(timeout=15) as http:
-            resp = await http.get("https://openlibrary.org/search.json", params=params)
-            resp.raise_for_status()
-            docs = resp.json().get("docs", [])
-    except Exception:
+        q_title = canonical_title(title)
+        for b in books:
+            if canonical_title(b.get("title", "")) == q_title and _authors_plausibly_match(author, b.get("author", "")):
+                return b
         return None
-    if not docs:
-        return None
-    doc = docs[0]
-    isbns = doc.get("isbn") or []
-    return {
-        "title": doc.get("title", title),
-        "author": (doc.get("author_name") or [author or "Unknown"])[0],
-        "year": doc.get("first_publish_year"),
-        "subjects": (doc.get("subject") or [])[:10],
-        "isbn": isbns[0] if isbns else None,
-        "cover_i": doc.get("cover_i"),
-    }
 
-
-def find_already_read(title: str, books: list[dict]) -> dict | None:
     q = title.lower().strip()
     for b in books:
         t = b.get("title", "").lower().strip()
@@ -80,22 +113,33 @@ async def nearest_neighbors(candidate: dict, books: list[dict], k: int = 5) -> l
 
 
 def build_predict_prompt(dna: dict, candidate: dict, neighbors: list[dict], avg_rating: float) -> str:
+    """`candidate`/`neighbors` come from Open Library search results and the
+    user's own shelf respectively — both untrusted text — and `dna` is
+    LLM-generated from the same Goodreads data. Every interpolated field is
+    sanitized here as defense in depth against injected instructions."""
     dims = dna.get("taste_dimensions", {})
     evidence = "\n".join(
-        f'- "{n["title"]}" by {n["author"]} — reader rated {n["my_rating"]}/5 (similarity {n["similarity"]})'
+        f'- "{sanitize_for_prompt(n.get("title", ""))}" by {sanitize_for_prompt(n.get("author", ""))} '
+        f'— reader rated {n["my_rating"]}/5 (similarity {n["similarity"]})'
         for n in neighbors
         if n["my_rating"]
     )
-    subjects = ", ".join(candidate.get("subjects", [])) or "unknown"
-    year = candidate.get("year") or "unknown"
+    subjects = ", ".join(sanitize_for_prompt(str(s)) for s in candidate.get("subjects", [])) or "unknown"
+    year = sanitize_for_prompt(str(candidate.get("year") or "")) or "unknown"
+    archetype = sanitize_for_prompt(str(dna.get("reader_archetype") or ""))
+    taste_summary = sanitize_for_prompt(str(dna.get("taste_summary") or ""))
+    top_themes = ", ".join(sanitize_for_prompt(str(t)) for t in dna.get("top_themes", []) or [])
+    avoid_themes = ", ".join(sanitize_for_prompt(str(t)) for t in dna.get("avoid_themes", []) or [])
+    candidate_title = sanitize_for_prompt(str(candidate.get("title", "")))
+    candidate_author = sanitize_for_prompt(str(candidate.get("author", "")))
 
     return f"""You are predicting whether a specific reader will enjoy a book they have NOT read yet.
 
 READER PROFILE:
-- Archetype: {dna.get('reader_archetype')}
-- Taste summary: {dna.get('taste_summary')}
-- Top themes: {', '.join(dna.get('top_themes', []))}
-- Themes to avoid: {', '.join(dna.get('avoid_themes', []))}
+- Archetype: {archetype}
+- Taste summary: {taste_summary}
+- Top themes: {top_themes}
+- Themes to avoid: {avoid_themes}
 - Prose density preference: {dims.get('prose_density')}/10
 - Pacing preference: {dims.get('pacing_preference')}/10
 - Intellectual depth: {dims.get('intellectual_depth')}/10
@@ -104,8 +148,8 @@ READER PROFILE:
 - Average rating this reader gives: {avg_rating:.2f}/5
 
 CANDIDATE BOOK:
-- Title: {candidate['title']}
-- Author: {candidate['author']}
+- Title: {candidate_title}
+- Author: {candidate_author}
 - First published: {year}
 - Subjects: {subjects}
 
@@ -129,19 +173,30 @@ Include 2-3 drivers, mixing positive and negative factors when both exist."""
 
 
 def log_prediction(entry: dict) -> None:
+    """Append a prediction record to the local JSONL log.
+
+    Opt-in via ENABLE_PREDICTION_LOG — disabled by default so this app
+    doesn't silently accumulate a global, multi-user log of every prediction
+    ever made. There is no public endpoint that exposes this file; it exists
+    purely as an optional local diagnostic/tuning aid.
+    """
+    if not ENABLE_PREDICTION_LOG:
+        return
     try:
-        with open(PREDICTIONS_LOG, "a") as f:
-            f.write(json.dumps(entry) + "\n")
-    except Exception as e:
-        # Logging must never break the request, but failures should be visible
-        print(f"[log_prediction] failed: {e}", file=sys.stderr)
+        with open(PREDICTIONS_LOG, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except (OSError, TypeError, ValueError) as e:
+        # Logging must never break the request (but CancelledError/other
+        # BaseExceptions must still propagate — only ordinary Exceptions
+        # from serialization/file I/O are swallowed here).
+        logger.warning("Prediction logging failed: %s", safe_exception_summary(e))
 
 
 def load_predictions() -> list[dict]:
     if not os.path.exists(PREDICTIONS_LOG):
         return []
     entries = []
-    with open(PREDICTIONS_LOG) as f:
+    with open(PREDICTIONS_LOG, encoding="utf-8") as f:
         for line in f:
             line = line.strip()
             if line:
@@ -153,11 +208,11 @@ def load_predictions() -> list[dict]:
 
 
 async def predict_rating(title: str, author: str | None, dna: dict, books: list[dict]) -> dict:
-    t_start = time.time()
+    t_start = time.perf_counter()
     stages: dict = {}
 
     # Already on their shelf?
-    already = find_already_read(title, books)
+    already = find_already_read(title, books, author)
     if already:
         return {
             "already_read": True,
@@ -170,44 +225,68 @@ async def predict_rating(title: str, author: str | None, dna: dict, books: list[
         }
 
     # Stage 1: resolve via Open Library
-    t0 = time.time()
-    resolved = await resolve_book(title, author)
-    stages["resolve_ms"] = round((time.time() - t0) * 1000)
+    t0 = time.perf_counter()
+    resolved, resolve_warning = await resolve_book(title, author)
+    stages["resolve_ms"] = round((time.perf_counter() - t0) * 1000)
     candidate = resolved or {"title": title, "author": author or "Unknown", "subjects": [], "year": None, "isbn": None}
 
     # Stage 2: embedding neighbors
-    t0 = time.time()
+    t0 = time.perf_counter()
     neighbors = await nearest_neighbors(candidate, books) if books else []
-    stages["embed_ms"] = round((time.time() - t0) * 1000)
+    stages["embed_ms"] = round((time.perf_counter() - t0) * 1000)
 
     # Stage 3: both models predict in parallel
     rated = [b.get("my_rating", 0) for b in books if b.get("my_rating")]
     avg_rating = sum(rated) / len(rated) if rated else 3.5
     prompt = build_predict_prompt(dna, candidate, neighbors, avg_rating)
 
-    t0 = time.time()
+    t0 = time.perf_counter()
     results = await asyncio.gather(
-        *(call_model(m, prompt) for m in MODELS),
+        *(call_model(m, prompt, system_prompt=PREDICTION_SYSTEM_PROMPT) for m in MODELS),
         return_exceptions=True,
     )
-    stages["llm_ms"] = round((time.time() - t0) * 1000)
-    stages["total_ms"] = round((time.time() - t_start) * 1000)
+    stages["llm_ms"] = round((time.perf_counter() - t0) * 1000)
+    stages["total_ms"] = round((time.perf_counter() - t_start) * 1000)
 
     predictions: dict = {}
     for model_id, res in zip(MODELS, results, strict=True):
         display = MODEL_INFO.get(model_id, {}).get("display", model_id)
-        # BaseException catches asyncio.CancelledError too (it's not an Exception subclass)
+        # Cancellation must never be mistaken for an ordinary model error —
+        # re-raise it so the caller (and asyncio) see the request was
+        # actually cancelled, not that the model "failed".
+        if isinstance(res, asyncio.CancelledError):
+            raise res
         if isinstance(res, BaseException):
-            predictions[display] = {"error": str(res) or type(res).__name__}
-        else:
-            meta = res.pop("_meta", {})
+            predictions[display] = {"error": safe_exception_summary(res)}
+            continue
+
+        meta = res.pop("_meta", {})
+        try:
+            validated = PredictionResponse.model_validate(res)
+        except ValidationError as e:
+            first_error = e.errors()[0] if e.errors() else {}
+            logger.warning(
+                "%s returned an invalid prediction payload: %s",
+                model_id,
+                validation_error_summary(e),
+            )
             predictions[display] = {
-                "predicted_rating": res.get("predicted_rating"),
-                "confidence": res.get("confidence"),
-                "why": res.get("why"),
-                "drivers": res.get("drivers", []),
+                "error": f"Model returned an invalid prediction ({first_error.get('msg', 'validation error')}).",
                 "meta": meta,
             }
+            continue
+
+        predictions[display] = {
+            "predicted_rating": validated.predicted_rating,
+            "confidence": validated.confidence,
+            "why": validated.why,
+            "drivers": [d.model_dump() for d in validated.drivers],
+            "meta": meta,
+        }
+
+    warnings: list[str] = []
+    if resolve_warning:
+        warnings.append(resolve_warning)
 
     payload = {
         "already_read": False,
@@ -218,6 +297,7 @@ async def predict_rating(title: str, author: str | None, dna: dict, books: list[
         "neighbors": neighbors,
         "reader_avg_rating": round(avg_rating, 2),
         "stages": stages,
+        "warnings": warnings,
     }
 
     log_prediction({

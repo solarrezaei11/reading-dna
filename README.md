@@ -1,137 +1,318 @@
-# ReadingDNA 🌿
+# ReadingDNA
 
-**A live AI model evaluation — applied to your reading taste.**
+ReadingDNA imports a Goodreads reading history, builds an AI-assisted taste
+profile, asks two models for recommendations, and places the results in the
+same semantic map as the reader's books.
 
-Paste your Goodreads profile. ReadingDNA builds a semantic taste profile from your reading history, then runs two frontier models head-to-head to recommend your next book. You see exactly which model knows you better, how fast each one responded, and where your recommendations land in the space of all books you've ever read.
-
-Built to explore a question I work with daily as a TPM on AI evaluation at Microsoft: *given the same context, how differently do two models reason — and how do you measure that?*
-
----
+It is an evaluation-oriented product demo, not a controlled model benchmark.
+The app exposes observed latency and an optional local judge, but it does not
+measure recommendation quality against reader outcomes or a human-labeled
+ground truth.
 
 <p align="center">
-  <img src="public/screenshots/01_landing.png" alt="Landing page" width="49%" />
-  <img src="public/screenshots/02_dna_profile.png" alt="Reading DNA profile" width="49%" />
-</p>
-<p align="center">
-  <img src="public/screenshots/03_map.png" alt="Reading Universe Map with AI recommendations" width="98%" />
+  <img src="public/screenshots/01_landing.png" alt="ReadingDNA import page" width="72%" />
 </p>
 
-*Demo: [Emily May](https://www.goodreads.com/user/show/4622890-emily-may) — Goodreads' most-followed reviewer, 197 books. Archetype: **The Darkly Curious Intellectual**. GPT-OSS 120B responded in **1,047ms**.*
+## What it does
 
----
+1. **Imports reading history**
+   - Public Goodreads profiles are loaded through paginated RSS shelves.
+   - Read, currently-reading, did-not-finish, and want-to-read shelves are
+     deduplicated using stable Goodreads identifiers where available.
+   - Goodreads CSV exports are supported for rated books.
+   - Partial imports remain usable and return visible warnings.
 
-## Why Cerebras
+2. **Builds a Reading DNA profile**
+   - A deterministic, rating-stratified sample spans both older and newer
+     books instead of taking only the first or highest-rated titles.
+   - The prompt includes bounded review excerpts and Goodreads average ratings
+     when available.
+   - Consensus-dependent fields are omitted when the source data is
+     insufficient rather than guessed.
 
-A 120-billion-parameter model typically takes several seconds to respond — GPU infrastructure has to move enormous amounts of weight across memory on every token. Cerebras' wafer-scale chip is built differently: the entire model fits on a single chip, eliminating the memory bottleneck.
+3. **Runs a recommendation battle**
+   - Cerebras-hosted `gpt-oss-120b` and `zai-glm-4.7` receive the same bounded
+     reader evidence.
+   - Returned JSON is validated, deduplicated, bounded, and filtered against
+     books already read, currently being read, or marked did-not-finish.
+   - Want-to-read matches are retained and labeled.
+   - Model-supplied ISBNs are verified or enriched through Open Library;
+     unverified values are omitted instead of being trusted.
+   - A failure from one model does not discard a valid result from the other.
 
-The result: **GPT-OSS 120B responds in ~1 second.** Same model you'd run on a GPU cluster and wait for — instant on Cerebras.
+4. **Builds the Reading Universe map**
+   - `all-MiniLM-L6-v2` creates local semantic embeddings.
+   - KMeans clusters normalized book embeddings.
+   - UMAP is fit on the user's books plus fixed genre anchors.
+   - Recommendations are transformed into that fitted reference space, so
+     adding recommendations does not refit and move the original books.
+   - If AI cluster naming fails, the map remains usable with fallback labels
+     and a warning.
 
-| Model | Parameters | TTFT | Generation | Total |
-|---|---|---|---|---|
-| GPT-OSS 120B (Cerebras) | 120B dense | **207 ms** | 1,140 ms | 1,347 ms |
-| GLM 4.7 (Cerebras) | 355B MoE (32B active) | **206 ms** | 11,553 ms | 11,759 ms |
+5. **Checks library availability**
+   - Library names, Libby URLs, and OverDrive keys are resolved to the
+     library's `preferredKey`.
+   - ISBNs are searched in the library catalog, then checked through the
+     dedicated title-availability endpoint for current ebook copy and wait
+     data.
 
-Both models start responding in ~200ms — same Cerebras infrastructure, same network. The difference is generation speed: GPT-OSS 120B, a fully dense model, completes in 1.1 seconds. GLM 4.7, despite having only 32B active parameters per token (MoE), takes 11.5 seconds to generate. Cerebras' wafer-scale chip is specifically optimized for dense transformer workloads — that's where the 10× generation speedup comes from.
+6. **Optionally runs a local judge**
+   - Qwen 2.5 7B runs through Ollama.
+   - Each recommendation set is scored independently under an anonymized
+     recommender label.
+   - The rubric covers relevance, diversity, reasoning depth, novelty, and
+     specificity.
+   - This is an automated heuristic, not an objective quality label.
 
----
+## Models and latency metrics
 
-## How it works
+| Model | Notes |
+|---|---|
+| `gpt-oss-120b` | Mixture-of-experts model, approximately 117B total parameters and 5.1B active parameters |
+| `zai-glm-4.7` | Cerebras-hosted GLM recommendation model |
+| `qwen2.5:7b` | Optional local judge through Ollama |
 
-1. **Import** — paste your Goodreads profile URL. The backend fetches your read, currently-reading, and did-not-finish shelves via RSS (including your written reviews — sequential requests to avoid rate limiting). CSV export is also supported.
+For streamed model calls:
 
-2. **Embed + cluster** — each book is converted to a 384-dim embedding via `all-MiniLM-L6-v2` (runs locally, no API cost), then reduced to 2D with UMAP alongside 15 fixed genre anchors. KMeans clusters your books; GPT-OSS 120B names each cluster at `temperature=0` for deterministic, stable labels.
+- **TTFT** is the measured time from request start to the first non-empty
+  content received by the backend.
+- **Generation time** is the remaining time from first content to completion.
+- **Total time** is the full observed request duration.
 
-3. **Model battle** — GPT-OSS 120B and GLM 4.7 each independently receive your full reading profile (titles, authors, ratings, review text, themes, archetype) and return 5 recommendations with reasoning. Consensus picks — titles both models chose — are highlighted. Picks outside your reading clusters get a "comfort zone" marker on the map.
+These measurements include provider, network, queueing, and client overhead.
+They do not reveal why a model was slower and should not be interpreted as a
+measurement of hidden reasoning. Results vary by network conditions, provider
+load, model revisions, and output length.
 
-4. **Visualize** — a D3.js map plots your book clusters, genre territory anchors, and AI picks as diamonds. Click any cluster to expand its books; click any genre anchor to surface the nearest AI picks. Click a model card to highlight only its picks on the map.
-
-5. **Share** — export a shareable card: archetype, avg rating, top themes, most-loved books.
-
-6. **Optional judge** — run Qwen 2.5 7B locally via Ollama as a neutral third-party judge. It evaluates each model's recommendations on four axes (relevance, reasoning depth, novelty, specificity) using the MT-Bench cross-evaluation approach: each model judges the other's output to avoid self-serving bias.
-
-7. **Library check** — OverDrive/Libby availability for every recommendation at your local library.
-
----
+The app uses `temperature=0` to reduce sampling variation. That improves
+repeatability, but it does not guarantee byte-identical output across provider,
+model, SDK, or infrastructure revisions.
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Frontend | Next.js 14 (App Router) · TypeScript · Tailwind CSS · D3.js |
-| Backend | FastAPI · Python · uvicorn |
-| Embeddings | `sentence-transformers` — `all-MiniLM-L6-v2` (local, no API cost) |
-| Dimensionality reduction | UMAP · KMeans (`scikit-learn`) |
-| LLMs | Cerebras Cloud SDK — `gpt-oss-120b` · `zai-glm-4.7` |
-| LLM judge (optional) | Qwen 2.5 7B via Ollama (local) |
-| Export | `html2canvas` (share card PNG) |
+| Frontend | Next.js 16, React 19, TypeScript, Tailwind CSS 4, D3.js |
+| Backend | FastAPI, Pydantic, HTTPX, Uvicorn |
+| Embeddings | Sentence Transformers, `all-MiniLM-L6-v2` |
+| Projection and clustering | UMAP, scikit-learn KMeans |
+| Hosted LLMs | Cerebras Cloud SDK |
+| Optional judge | Ollama with Qwen 2.5 7B |
+| Testing | Vitest, React Testing Library, Python `unittest` |
 
----
+## Requirements
 
-## Setup
+- Node.js 22 is used in CI.
+- Python 3.12 or newer.
+- A [Cerebras API key](https://cloud.cerebras.ai/) for AI-powered endpoints.
+- Optional: [Ollama](https://ollama.com/) with `qwen2.5:7b` for the local judge.
 
-### 1. Clone and install
+The first embedding request downloads `all-MiniLM-L6-v2` unless it is already
+present in the local Hugging Face cache.
 
-```bash
+## Local setup
+
+### 1. Install the frontend
+
+```powershell
 git clone https://github.com/solarrezaei11/reading-dna.git
-cd reading-dna
-npm install
+Set-Location reading-dna
+npm ci
 ```
 
-### 2. Python backend
+### 2. Create the backend environment
+
+Windows PowerShell:
+
+```powershell
+py -m venv backend\venv
+.\backend\venv\Scripts\python.exe -m pip install -r backend\requirements.txt
+```
+
+macOS or Linux:
 
 ```bash
-cd backend
-python3 -m venv venv
-source venv/bin/activate   # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+python3 -m venv backend/venv
+backend/venv/bin/python -m pip install -r backend/requirements.txt
 ```
 
-### 3. Environment variables
+`backend/requirements.txt` contains the direct runtime dependencies. Use
+`backend/requirements.lock.txt` instead when you need the fully pinned
+dependency versions used for reproducible validation.
+
+### 3. Configure environment variables
+
+Create a root `.env.local` from `.env.example`:
+
+```powershell
+Copy-Item .env.example .env.local
+```
 
 ```bash
 cp .env.example .env.local
 ```
 
-Edit `.env.local` and add your [Cerebras API key](https://cloud.cerebras.ai) (free tier available).
+At minimum, set:
 
-### 4. Run
+```dotenv
+CEREBRAS_API_KEY=your-key
+NEXT_PUBLIC_API_URL=http://localhost:8000
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+```
+
+`.env.example` documents the remaining limits, CORS, rate, cache, logging,
+timeout, and optional backend access-token settings.
+
+### 4. Start both services
+
+Windows PowerShell:
+
+```powershell
+.\backend\start.ps1
+```
+
+macOS or Linux:
 
 ```bash
-# Terminal 1 — backend
-cd backend && bash start.sh   # sources .env.local, then starts uvicorn
+./backend/start.sh
+```
 
-# Terminal 2 — frontend
+In a second terminal:
+
+```bash
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
 
+The development launchers load literal key/value entries from the root
+`.env.local`, activate `backend/venv`, bind the backend to `127.0.0.1:8000`,
+and enable Uvicorn reload.
+
 ### Goodreads profile setup
 
-Your profile must be **public**: Goodreads → Account → Settings → Privacy → "Who can view my profile" → Everyone.
+For URL import, the Goodreads profile and relevant shelves must be public.
+Use the canonical profile form:
 
-Use your full profile URL: `https://www.goodreads.com/user/show/12345678-your-name`
+```text
+https://www.goodreads.com/user/show/12345678-reader-name
+```
 
-### Optional: LLM judge (Qwen via Ollama)
+For CSV import, use Goodreads **My Books > Import and export > Export
+library**.
+
+### Optional local judge
 
 ```bash
-brew install ollama
 ollama pull qwen2.5:7b
 ollama serve
 ```
 
-The "Run Judge" button appears on the results page. Takes ~2 minutes on local hardware.
+The judge can take substantially longer than the hosted recommendation calls,
+especially on CPU-only hardware.
 
----
+## Configuration and deployment
 
-## Design decisions
+The backend includes:
 
-**Why `temperature=0` everywhere?** Early versions used `temperature=0.7–0.8`, which caused the archetype label, recommendations, and share card to shift between runs for the same library. Setting it to 0 makes the analysis fully deterministic — same Goodreads history always produces the same output.
+- request-body and collection-size limits;
+- per-client, per-endpoint in-memory rate limits;
+- bounded LLM, CPU, Libby, and lookup concurrency;
+- finite external-request timeouts;
+- configurable CORS origins;
+- optional shared bearer-token protection;
+- opt-in prediction logging;
+- a non-secret `/health` readiness response.
 
-**Why local embeddings?** Sending 200 book titles to an embedding API on every load adds latency, cost, and a network dependency. `all-MiniLM-L6-v2` runs in ~2s locally and produces embeddings good enough for genre-level clustering.
+For a hosted deployment:
 
-**Why sort books before UMAP?** Goodreads RSS returns books in a different order each request. UMAP is sensitive to input order even with `random_state=42`. Alphabetical sort before embedding ensures the map layout is reproducible.
+1. Serve the frontend and backend over HTTPS.
+2. Set `CORS_ORIGINS` to the exact frontend origins.
+3. Keep `CEREBRAS_API_KEY` and any backend access token in the hosting
+   platform's secret store.
+4. Do not put backend secrets in variables prefixed with `NEXT_PUBLIC_`.
+5. Do not run Uvicorn with `--reload`; use a process manager or container
+   command appropriate for the hosting platform.
+6. Put multi-instance deployments behind a shared rate limiter if a global
+   limit is required. The built-in limiter and caches are process-local.
+7. Leave `RATE_LIMIT_TRUSTED_PROXY_HOPS=0` unless direct backend access is
+   restricted to a known proxy chain. When enabled, set it to the fixed
+   number of trusted hops that append or replace `X-Forwarded-For`; untrusted
+   forwarded prefixes are ignored by selecting from the right side.
 
-**Why parse `<user_review>` from RSS?** The Goodreads RSS feed includes written reviews inside a `<user_review>` tag — not just star ratings. Including review text in the embedding input significantly improves cluster quality (Emily May's dataset: 149/197 books had review text).
+The optional bearer token is a deployment-wide control, not user
+authentication or multi-tenant authorization. A browser cannot keep a shared
+secret. Use it only behind a trusted server-side proxy or an authenticated
+ingress that can attach the header.
 
-**Why an opt-in judge?** Qwen 2.5 7B running locally pegs a laptop CPU for ~2 minutes. Making it opt-in means the main analysis completes in ~5 seconds (Cerebras is fast), and the judge is there for when you want the deeper comparison.
+`NEXT_PUBLIC_SITE_URL` must be set for production metadata, robots, and
+sitemap URLs. The safe fallback is `http://localhost:3000`; no live deployment
+URL is assumed.
+
+## API surface
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/health` | Non-secret readiness information |
+| `POST` | `/parse/csv` | Parse a Goodreads CSV export |
+| `POST` | `/parse/rss` | Import paginated public Goodreads shelves |
+| `POST` | `/dna` | Generate and validate the Reading DNA profile |
+| `POST` | `/battle` | Run and validate both recommendation models |
+| `POST` | `/embeddings` | Build the shared map and cluster labels |
+| `POST` | `/libby` | Resolve a library and check ISBN availability |
+| `POST` | `/judge` | Run the optional local judge |
+| `POST` | `/predict` | Predict a rating for a candidate book |
+
+When backend bearer-token protection is enabled, all routes except `/health`
+and CORS preflight requests require the configured token.
+
+## Validation commands
+
+Frontend:
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+npm audit --audit-level=moderate
+```
+
+Backend:
+
+```bash
+cd backend
+python -m pip check
+python -m compileall -q .
+python -m unittest discover -s tests -p "test_*.py" -v
+```
+
+GitHub Actions runs the same frontend checks and installs the pinned backend
+lock before compiling and testing Python.
+
+## Privacy
+
+Goodreads imports can include titles, authors, ratings, shelves, and written
+reviews. Some AI-powered operations send bounded reading evidence to
+Cerebras. Goodreads, Open Library, and OverDrive receive the lookup data
+needed for their respective features.
+
+Prediction logging is disabled by default. ReadingDNA does not provide user
+accounts or multi-tenant data isolation.
+
+See [PRIVACY.md](PRIVACY.md) before hosting the app or processing another
+person's reading history.
+
+## Limitations
+
+- Goodreads RSS and OverDrive are external services. Safety caps, upstream
+  errors, or API changes can produce partial results; the UI surfaces warnings.
+- CSV import does not provide the same shelf-specific context as RSS import.
+- Book titles, authors, editions, and ISBN metadata can be inconsistent across
+  Goodreads, model output, Open Library, and OverDrive.
+- Libby availability is edition- and library-specific and can change after the
+  request completes.
+- UMAP is a visualization technique. Nearby points suggest semantic
+  similarity, but map distance is not a calibrated relevance score.
+- Automated recommendation and judge outputs can be wrong. Reader feedback or
+  human evaluation is required to establish real recommendation quality.

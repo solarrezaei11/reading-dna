@@ -1,12 +1,14 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono, DM_Serif_Display } from "next/font/google";
 import "./globals.css";
+import { siteUrl } from "@/lib/site";
 
 const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
 const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
 const dmSerif = DM_Serif_Display({ weight: "400", variable: "--font-dm-serif", subsets: ["latin"] });
 
 export const metadata: Metadata = {
+  metadataBase: siteUrl(),
   title: "ReadingDNA — Which AI knows you best as a reader?",
   description: "Import your Goodreads history. Two AI models compete to recommend books you'll love — and you see who knows your taste better. Get your Reading DNA profile.",
   keywords: ["goodreads", "book recommendations", "AI books", "reading profile", "book taste", "reading DNA", "book finder"],
@@ -15,6 +17,7 @@ export const metadata: Metadata = {
     description: "Import your Goodreads history. Two AI models compete to recommend books you'll love — see who wins.",
     type: "website",
     siteName: "ReadingDNA",
+    url: siteUrl(),
   },
   twitter: {
     card: "summary_large_image",

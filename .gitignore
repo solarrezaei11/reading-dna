@@ -36,8 +36,9 @@ yarn-error.log*
 
 # Python
 backend/venv/
-backend/__pycache__/
-backend/*.pyc
+__pycache__/
+*.py[cod]
+.coverage
 
 # vercel
 .vercel
