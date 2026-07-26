@@ -368,3 +368,8 @@ person's reading history.
   similarity, but map distance is not a calibrated relevance score.
 - Automated recommendation and judge outputs can be wrong. Reader feedback or
   human evaluation is required to establish real recommendation quality.
+- GLM 4.7 on Cerebras has an 8192-token total-context ceiling (input + output).
+  For very large libraries the prompt can fill the window with reasoning and
+  leave no room for output, so the model may return no recommendations. This
+  surfaces as `ContextLimitReached` and is expected behavior rather than a bug;
+  try a smaller library or a different model in that case.
