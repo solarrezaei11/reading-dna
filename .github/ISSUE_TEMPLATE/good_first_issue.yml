@@ -1,0 +1,31 @@
+name: Good first issue
+description: A small, well-scoped task suitable for a first-time contributor
+title: "[good first issue]: "
+labels: ["good first issue"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping! Please read [CONTRIBUTING.md](../CONTRIBUTING.md) first.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What should change and why?
+    validations:
+      required: true
+  - type: textarea
+    id: pointers
+    attributes:
+      label: Where to start
+      description: Relevant files, functions, or line numbers.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How will we know the task is done?
+      placeholder: |
+        - [ ] ...
+        - [ ] Validation commands pass
+    validations:
+      required: true
