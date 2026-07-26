@@ -51,7 +51,14 @@ export type ModelMeta = {
 export type BattleModel = {
   recommendations: Recommendation[];
   meta?: ModelMeta | null;
-  info?: { display?: string; description?: string };
+  info?: {
+    display?: string;
+    description?: string;
+    family?: string;
+    family_display?: string;
+    provider?: string;
+    provider_display?: string;
+  };
   error?: string;
 };
 

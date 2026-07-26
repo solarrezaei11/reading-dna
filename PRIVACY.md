@@ -14,9 +14,12 @@ define how that data may be reused.
   shelves, and written reviews.
 - The configured backend receives that reading history to build the profile,
   recommendations, map, and rating predictions.
-- Cerebras receives a bounded summary of the reading history and generated
-  profile when an LLM-powered feature runs. Imported text is treated as
-  untrusted data, but it still leaves the local environment for those calls.
+- The hosted LLM provider(s) you have configured receive a bounded summary of
+  the reading history and generated profile when an LLM-powered feature runs.
+  This is Cerebras by default, and additionally Groq and/or OpenRouter when you
+  enable them for the recommendation battle (`GROQ_API_KEY` /
+  `OPENROUTER_API_KEY`). Imported text is treated as untrusted data, but it
+  still leaves the local environment for those calls.
 - Goodreads, Open Library, and OverDrive receive the lookup data required for
   their respective import, metadata, cover, and availability requests.
 - The browser stores the active analysis input in session storage so it is
@@ -46,7 +49,8 @@ and avoid logging request bodies or secrets.
 
 ## Secrets
 
-Keep `CEREBRAS_API_KEY` and any backend access token in `.env.local` or the
+Keep `CEREBRAS_API_KEY`, any optional provider keys (`GROQ_API_KEY`,
+`OPENROUTER_API_KEY`), and any backend access token in `.env.local` or the
 hosting platform's secret store. Never prefix secrets with `NEXT_PUBLIC_`,
 commit `.env.local`, or place API keys in browser code. Use HTTPS for any
 non-local deployment so reading history and authorization headers are

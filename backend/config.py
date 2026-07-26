@@ -92,6 +92,38 @@ CORS_ORIGINS = [
 # --- Secrets / readiness -----------------------------------------------
 CEREBRAS_API_KEY = os.environ.get("CEREBRAS_API_KEY", "")
 
+# --- Additional free-tier LLM providers (opt-in) ------------------------
+# The recommendation "battle" runs every model whose provider key is set, so
+# adding a key here transparently adds that model as a competitor. Absent
+# keys simply exclude that provider — with only CEREBRAS_API_KEY configured
+# the app behaves exactly as before. Both providers are OpenAI-compatible and
+# are streamed over httpx (no extra SDK required).
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "")
+OPENROUTER_API_KEY = os.environ.get("OPENROUTER_API_KEY", "")
+
+# Free-tier model availability rotates over time, so the specific model each
+# provider contributes is env-overridable without a code change. Defaults are
+# current, widely-available free-tier chat models.
+GROQ_BATTLE_MODEL = (os.environ.get("GROQ_BATTLE_MODEL", "") or "llama-3.3-70b-versatile").strip()
+OPENROUTER_BATTLE_MODEL = (
+    os.environ.get("OPENROUTER_BATTLE_MODEL", "") or "google/gemma-4-26b-a4b-it:free"
+).strip()
+
+# Upper bound on generated tokens per battle completion. Two competing
+# constraints set this value:
+#   * Reasoning models (e.g. GLM 4.7) can occasionally enter a long
+#     chain-of-thought that exhausts a provider's *implicit* default output
+#     cap before emitting any answer content, surfacing as a
+#     `finish_reason=length` with zero content chunks — so the cap must be
+#     generous enough for reasoning + the recommendation payload.
+#   * Free tiers meter requested tokens: Groq's free tier rejects a request
+#     (HTTP 413) when prompt + max_tokens exceeds its ~12k tokens-per-minute
+#     limit, so the cap must stay well under that.
+# 8000 satisfies both. Env-overridable.
+BATTLE_MAX_COMPLETION_TOKENS = _require_positive_int(
+    "BATTLE_MAX_COMPLETION_TOKENS", _env_int("BATTLE_MAX_COMPLETION_TOKENS", 8000)
+)
+
 # --- Optional backend access token ---------------------------------------
 # Unset (default) preserves today's open behavior. When set, API routes
 # require `Authorization: Bearer <token>` (OPTIONS and /health are always

@@ -26,42 +26,24 @@ from typing import Optional
 import httpx
 from pydantic import ValidationError
 
-from config import ISBN_VERIFY_CONCURRENCY, ISBN_VERIFY_TIMEOUT_SECONDS, LLM_ATTEMPT_TIMEOUT_SECONDS, MAX_REVIEW_EXCERPT_CHARS
+from config import BATTLE_MAX_COMPLETION_TOKENS, ISBN_VERIFY_CONCURRENCY, ISBN_VERIFY_TIMEOUT_SECONDS, LLM_ATTEMPT_TIMEOUT_SECONDS, MAX_REVIEW_EXCERPT_CHARS
 from error_safety import safe_exception_summary, validation_error_summary
 from llm_client import call_with_limit
 from models import JudgeVerdictPayload, RecommendationItem
 from open_library import lookup_open_library
 from prompt_safety import guarded_system_prompt, sanitize_for_prompt
+from providers import (
+    MODEL_INFO,
+    PROVIDERS,
+    api_model_for,
+    available_battle_models,
+    display_for_model,
+    max_tokens_for,
+    provider_for_model,
+)
 from sampling import build_representative_sample, format_book_line
 
 logger = logging.getLogger(__name__)
-
-MODEL_INFO = {
-    "gpt-oss-120b": {
-        "display": "GPT-OSS 120B",
-        "description": (
-            "Reasoning model — MoE architecture, 117B total / 5.1B active parameters per token, "
-            "128 experts. TTFT (time-to-first-token) here is observed response-start latency for "
-            "this run only — it is not evidence of hidden reasoning depth or model quality."
-        ),
-        "architecture": "MoE",
-        "total_params": "117B",
-        "active_params": "5.1B",
-        "task_fit": "reasoning",
-    },
-    "zai-glm-4.7": {
-        "display": "GLM 4.7",
-        "description": (
-            "ZhipuAI's GLM-4 series — MoE architecture, 355B total / 32B active parameters per token. "
-            "TTFT (time-to-first-token) here is observed response-start latency for this run only — "
-            "it is not evidence of model quality."
-        ),
-        "architecture": "MoE",
-        "total_params": "355B",
-        "active_params": "32B",
-        "task_fit": "interactive",
-    },
-}
 
 # Canonical rubric — these keys are used BOTH for the human-readable rubric
 # returned from /battle AND as the exact score keys the judge model must
@@ -99,7 +81,7 @@ _TITLE_WHITESPACE_RE = re.compile(r"\s+")
 _ISBN_CLEAN_RE = re.compile(r"[\s\-]")
 _ISBN_VALID_RE = re.compile(r"^(?:\d{9}[\dXx]|\d{13})$")
 
-_client = None
+_clients: dict[str, object] = {}
 
 
 def _bounded_model_error(error: BaseException | str) -> str:
@@ -113,21 +95,25 @@ def _bounded_model_error(error: BaseException | str) -> str:
     return message[: MODEL_ERROR_MAX_CHARS - 3] + "..."
 
 
-def _get_client():
-    """Lazily construct (and cache) the Cerebras client.
+def _get_client(model: str = ""):
+    """Lazily construct (and cache) the SDK client for `model`'s provider.
 
+    Only Cerebras uses an SDK client here; OpenAI-compatible providers
+    (Groq/OpenRouter) are streamed over httpx and never reach this path.
     Deferred import keeps this module importable — and therefore unit
     testable — without the cerebras SDK installed, and avoids constructing
     a network client at import time before an API key is configured.
     """
-    global _client
-    if _client is None:
+    provider = provider_for_model(model)
+    client = _clients.get(provider)
+    if client is None:
         import os
 
         from cerebras.cloud.sdk import AsyncCerebras
 
-        _client = AsyncCerebras(api_key=os.environ.get("CEREBRAS_API_KEY"))
-    return _client
+        client = AsyncCerebras(api_key=os.environ.get(PROVIDERS[provider]["api_key_env"]))
+        _clients[provider] = client
+    return client
 
 
 def _unicode_fold(text: str) -> str:
@@ -572,31 +558,131 @@ async def call_model(model: str, prompt: str, retries: int = 3, system_prompt: s
     raise RuntimeError("unreachable")
 
 
+def _apply_delta(
+    state: dict,
+    content: Optional[str],
+    finish_reason: Optional[str],
+    prompt_tokens: Optional[int],
+    completion_tokens: Optional[int],
+) -> None:
+    """Fold a single normalized streaming delta into `state`, recording TTFT
+    on the first non-empty *content* delta (perf_counter, not first stream
+    event). Shared by every provider's stream loop so TTFT/token accounting
+    is identical regardless of transport (Cerebras SDK vs OpenAI-compatible
+    httpx SSE)."""
+    if content:
+        if state["ttft"] is None:
+            state["ttft"] = time.perf_counter()
+        state["chunks"].append(content)
+    if finish_reason:
+        state["finish_reason"] = finish_reason
+    if prompt_tokens is not None:
+        state["prompt_tokens"] = prompt_tokens
+    if completion_tokens is not None:
+        state["completion_tokens"] = completion_tokens
+
+
 async def _stream_completion(model: str, prompt: str, state: dict, system_prompt: str = "") -> None:
     """Consume the streaming completion, recording TTFT on the first
-    non-empty content delta (perf_counter, not first stream event)."""
-    client = _get_client()
+    non-empty content delta (perf_counter, not first stream event).
+
+    Routes by the model's provider: Cerebras uses its async SDK; every other
+    (OpenAI-compatible) provider — Groq, OpenRouter — is streamed over raw
+    httpx SSE. Both paths fold deltas through `_apply_delta`, so latency and
+    token accounting stay identical across providers.
+    """
+    messages = [
+        {"role": "system", "content": system_prompt or RECOMMENDER_SYSTEM_PROMPT},
+        {"role": "user", "content": prompt},
+    ]
+    provider = provider_for_model(model)
+    api_model = api_model_for(model)
+    max_tokens = max_tokens_for(model) or BATTLE_MAX_COMPLETION_TOKENS
+    if PROVIDERS[provider]["sdk"] == "cerebras":
+        await _stream_via_cerebras(model, api_model, messages, state, max_tokens)
+    else:
+        await _stream_via_openai_http(provider, api_model, messages, state, max_tokens)
+
+
+async def _stream_via_cerebras(model: str, api_model: str, messages: list[dict], state: dict, max_tokens: int) -> None:
+    client = _get_client(model)
     stream = await client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system_prompt or RECOMMENDER_SYSTEM_PROMPT},
-            {"role": "user", "content": prompt},
-        ],
+        model=api_model,
+        messages=messages,
         temperature=0,
+        max_completion_tokens=max_tokens,
         stream=True,
     )
     async for chunk in stream:
+        content = None
+        finish_reason = None
         if chunk.choices:
-            delta = chunk.choices[0].delta.content
-            if delta:
-                if state["ttft"] is None:
-                    state["ttft"] = time.perf_counter()
-                state["chunks"].append(delta)
-            if chunk.choices[0].finish_reason:
-                state["finish_reason"] = chunk.choices[0].finish_reason
-        if chunk.usage:
-            state["prompt_tokens"] = chunk.usage.prompt_tokens
-            state["completion_tokens"] = chunk.usage.completion_tokens
+            content = chunk.choices[0].delta.content
+            finish_reason = chunk.choices[0].finish_reason
+        usage = chunk.usage
+        _apply_delta(
+            state,
+            content,
+            finish_reason,
+            usage.prompt_tokens if usage else None,
+            usage.completion_tokens if usage else None,
+        )
+
+
+async def _stream_via_openai_http(provider: str, api_model: str, messages: list[dict], state: dict, max_tokens: int) -> None:
+    """Stream an OpenAI-compatible /chat/completions SSE response over httpx.
+
+    `stream_options.include_usage` asks the provider to emit a final
+    usage-only chunk so token accounting matches the Cerebras path. A missing
+    or malformed usage chunk simply leaves token counts as None — it never
+    fails the call. The bounding timeout/concurrency is applied by the caller
+    (call_with_limit); here we just consume the stream.
+    """
+    import os
+
+    cfg = PROVIDERS[provider]
+    api_key = os.environ.get(cfg["api_key_env"], "")
+    url = f"{cfg['base_url'].rstrip('/')}/chat/completions"
+    payload = {
+        "model": api_model,
+        "messages": messages,
+        "temperature": 0,
+        "max_tokens": max_tokens,
+        "stream": True,
+        "stream_options": {"include_usage": True},
+    }
+    headers = {"Authorization": f"Bearer {api_key}"}
+
+    # No explicit httpx timeout here: the per-attempt bound is enforced by the
+    # surrounding call_with_limit(..., timeout=LLM_ATTEMPT_TIMEOUT_SECONDS),
+    # which cancels this coroutine (and thus closes the stream) on timeout.
+    async with httpx.AsyncClient(timeout=None) as client:
+        async with client.stream("POST", url, json=payload, headers=headers) as resp:
+            resp.raise_for_status()
+            async for line in resp.aiter_lines():
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[len("data:"):].strip()
+                if not data or data == "[DONE]":
+                    continue
+                try:
+                    chunk = json.loads(data)
+                except json.JSONDecodeError:
+                    continue  # tolerate keep-alive / non-JSON SSE comments
+                content = None
+                finish_reason = None
+                choices = chunk.get("choices") or []
+                if choices:
+                    content = (choices[0].get("delta") or {}).get("content")
+                    finish_reason = choices[0].get("finish_reason")
+                usage = chunk.get("usage") or {}
+                _apply_delta(
+                    state,
+                    content,
+                    finish_reason,
+                    usage.get("prompt_tokens"),
+                    usage.get("completion_tokens"),
+                )
 
 
 async def _call_model_once(model: str, prompt: str, system_prompt: str = "") -> dict:
@@ -767,22 +853,25 @@ async def run_battle(
     exclude_index = build_exclude_index(books, currently_reading, dnf)
     tbr_index = build_exclude_index(want_to_read)
 
-    gpt_recs, glm_recs = await asyncio.gather(
-        call_model("gpt-oss-120b", prompt),
-        call_model("zai-glm-4.7", prompt),
+    # Every model whose provider key is configured competes this run. With
+    # only CEREBRAS_API_KEY set this is exactly the original two Cerebras
+    # models; adding a Groq/OpenRouter key transparently adds competitors.
+    model_ids = available_battle_models()
+    if not model_ids:
+        raise RuntimeError(
+            "No recommendation models are available. Configure at least one provider API key "
+            "(e.g. CEREBRAS_API_KEY, GROQ_API_KEY, or OPENROUTER_API_KEY)."
+        )
+
+    raw_results = await asyncio.gather(
+        *(call_model(model_id, prompt) for model_id in model_ids),
         return_exceptions=True,
     )
 
-    models = {
-        "GPT-OSS 120B": gpt_recs,
-        "GLM 4.7": glm_recs,
-    }
-
     results = {}
     battle_warnings: list[str] = []
-    for model_id, (name, recs) in zip(
-        ["gpt-oss-120b", "zai-glm-4.7"], models.items(), strict=True
-    ):
+    for model_id, recs in zip(model_ids, raw_results, strict=True):
+        name = display_for_model(model_id)
         info = MODEL_INFO.get(model_id, {})
         # Cancellation must never be mistaken for an ordinary model error —
         # re-raise it so the caller (and asyncio) see the request was
@@ -828,8 +917,8 @@ async def run_battle(
 
     # LLM-supplied ISBNs are never trusted blindly: verify/enrich the at
     # most TARGET_RECS-per-model surviving picks against Open Library before
-    # returning them, deduplicating lookups across both models' picks (e.g.
-    # a consensus pick recommended by both). This mutates each rec's "isbn"
+    # returning them, deduplicating lookups across all models' picks (e.g.
+    # a consensus pick recommended by several). This mutates each rec's "isbn"
     # field in place; any lookup outage surfaces as a warning rather than
     # failing the battle.
     all_recs = [rec for r in results.values() for rec in r.get("recommendations", [])]
@@ -843,28 +932,31 @@ async def run_judge(dna: dict, battle_results: dict) -> dict:
     """Independently score each anonymized model's recommendations using a
     local judge model (NOT pairwise/order-swapped cross-evaluation — each
     recommender's list is judged on its own merits by a separate judge call;
-    there is no swapping of the two models' positions to control for order
-    bias, only randomized A/B label *assignment* per run so the judge never
-    sees which physical model produced which list).
+    there is no swapping of models' positions to control for order bias, only
+    randomized A/B/C… label *assignment* per run so the judge never sees
+    which physical model produced which list).
 
-    Model identity is blinded from the judge (anonymized as "Recommender A"/
-    "Recommender B" in a randomized mapping). Each judge call's raw JSON is
-    validated with JudgeVerdictPayload (rejecting missing OR extra rubric
-    score keys) before being trusted. A single judge call failing
-    (exception, timeout, or invalid JSON) is surfaced as
-    result['judge'][model_display] = {"error": ...} — the other model's
-    successful judge result is preserved, not discarded. Only when BOTH
+    The battle is N-way: every model present in `battle_results` is judged,
+    not a fixed pair. Model identity is blinded from the judge (anonymized as
+    "Recommender A"/"Recommender B"/… in a randomized mapping). Each judge
+    call's raw JSON is validated with JudgeVerdictPayload (rejecting missing
+    OR extra rubric score keys) before being trusted. A single judge call
+    failing (exception, timeout, or invalid JSON) is surfaced as
+    result['judge'][model_display] = {"error": ...} — other models'
+    successful judge results are preserved, not discarded. Only when ALL
     judge calls fail does this raise, so the caller never returns a
-    success-shaped payload with a fabricated winner. If only ONE judge call
-    succeeds, `winner` is forced to None — a lone scored model is never
-    declared the winner against an unscored competitor.
+    success-shaped payload with a fabricated winner. If fewer than two models
+    end up scored, `winner` is forced to None — a lone scored model is never
+    declared the winner against unscored competitors.
     """
     models_data = battle_results.get("models", {})
     if not isinstance(models_data, dict):
         raise ValueError("battle_results.models must be an object")
-    model_names = [n for n in ("GPT-OSS 120B", "GLM 4.7") if n in models_data]
+    # Judge every model present in the battle results (N-way), not a fixed
+    # pair. Insertion order is preserved so behavior is deterministic.
+    model_names = [n for n, r in models_data.items() if isinstance(r, dict)]
     if len(model_names) < 2:
-        raise ValueError("run_judge requires recommendations from both models in battle_results")
+        raise ValueError("run_judge requires recommendations from at least two models in battle_results")
 
     judge_results: dict = {}
     errors: dict = {}
@@ -977,12 +1069,12 @@ async def run_judge(dna: dict, battle_results: dict) -> dict:
         winner = tied[0] if len(tied) == 1 else None
         tie = len(tied) > 1
     elif len(scored_names) == 1:
-        # Only one of the two models actually got scored — never crown it
-        # winner against a competitor that has no score to compare against.
+        # Only one model got scored — never crown it winner against
+        # competitors that have no score to compare against.
         winner = None
         tie = False
     else:
-        raise RuntimeError(f"Judge returned no usable scores for either recommender: {errors}")
+        raise RuntimeError(f"Judge returned no usable scores for any recommender: {errors}")
 
     if winner is not None and winner not in model_names:
         raise RuntimeError("Judge selected an unknown recommender.")

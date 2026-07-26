@@ -31,14 +31,17 @@ ground truth.
      insufficient rather than guessed.
 
 3. **Runs a recommendation battle**
-   - Cerebras-hosted `gpt-oss-120b` and `zai-glm-4.7` receive the same bounded
-     reader evidence.
+   - Every model whose provider API key is configured competes in the same
+     run (an N-way battle), each receiving the identical bounded reader
+     evidence. Cerebras-hosted `gpt-oss-120b` and `zai-glm-4.7` are the
+     defaults; adding a `GROQ_API_KEY` or `OPENROUTER_API_KEY` transparently
+     adds those free-tier models as extra competitors — no code change needed.
    - Returned JSON is validated, deduplicated, bounded, and filtered against
      books already read, currently being read, or marked did-not-finish.
    - Want-to-read matches are retained and labeled.
    - Model-supplied ISBNs are verified or enriched through Open Library;
      unverified values are omitted instead of being trusted.
-   - A failure from one model does not discard a valid result from the other.
+   - A failure from one model does not discard a valid result from the others.
 
 4. **Builds the Reading Universe map**
    - `all-MiniLM-L6-v2` creates local semantic embeddings.
@@ -66,11 +69,18 @@ ground truth.
 
 ## Models and latency metrics
 
-| Model | Notes |
-|---|---|
-| `gpt-oss-120b` | Mixture-of-experts model, approximately 117B total parameters and 5.1B active parameters |
-| `zai-glm-4.7` | Cerebras-hosted GLM recommendation model |
-| `qwen2.5:7b` | Optional local judge through Ollama |
+| Model | Provider | Notes |
+|---|---|---|
+| `gpt-oss-120b` | Cerebras | Mixture-of-experts model, approximately 117B total parameters and 5.1B active parameters |
+| `zai-glm-4.7` | Cerebras | Cerebras-hosted GLM recommendation model |
+| `llama-3.3-70b-versatile` | Groq (free tier) | Opt-in via `GROQ_API_KEY`; override with `GROQ_BATTLE_MODEL` |
+| `meta-llama/llama-3.3-70b-instruct:free` | OpenRouter (free tier) | Opt-in via `OPENROUTER_API_KEY`; override with `OPENROUTER_BATTLE_MODEL` |
+| `qwen2.5:7b` | Ollama (local) | Optional local judge |
+
+Groq and OpenRouter are OpenAI-compatible and are streamed over `httpx`, so no
+additional SDK is required. Free-tier model availability rotates over time; if a
+default model ID is retired, set `GROQ_BATTLE_MODEL` / `OPENROUTER_BATTLE_MODEL`
+to a currently-available free model without changing code.
 
 For streamed model calls:
 
@@ -96,7 +106,7 @@ model, SDK, or infrastructure revisions.
 | Backend | FastAPI, Pydantic, HTTPX, Uvicorn |
 | Embeddings | Sentence Transformers, `all-MiniLM-L6-v2` |
 | Projection and clustering | UMAP, scikit-learn KMeans |
-| Hosted LLMs | Cerebras Cloud SDK |
+| Hosted LLMs | Cerebras Cloud SDK; Groq and OpenRouter (free tier) over OpenAI-compatible HTTPX |
 | Optional judge | Ollama with Qwen 2.5 7B |
 | Testing | Vitest, React Testing Library, Python `unittest` |
 
@@ -158,6 +168,15 @@ At minimum, set:
 CEREBRAS_API_KEY=your-key
 NEXT_PUBLIC_API_URL=http://localhost:8000
 NEXT_PUBLIC_SITE_URL=http://localhost:3000
+```
+
+To add more competitors to the recommendation battle, also set one or both of
+the optional free-tier provider keys (any model whose key is present joins the
+battle automatically):
+
+```dotenv
+GROQ_API_KEY=your-groq-key
+OPENROUTER_API_KEY=your-openrouter-key
 ```
 
 `.env.example` documents the remaining limits, CORS, rate, cache, logging,
@@ -257,7 +276,7 @@ URL is assumed.
 | `POST` | `/parse/csv` | Parse a Goodreads CSV export |
 | `POST` | `/parse/rss` | Import paginated public Goodreads shelves |
 | `POST` | `/dna` | Generate and validate the Reading DNA profile |
-| `POST` | `/battle` | Run and validate both recommendation models |
+| `POST` | `/battle` | Run and validate every configured recommendation model (N-way) |
 | `POST` | `/embeddings` | Build the shared map and cluster labels |
 | `POST` | `/libby` | Resolve a library and check ISBN availability |
 | `POST` | `/judge` | Run the optional local judge |

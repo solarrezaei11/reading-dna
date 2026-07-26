@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import DNAProfile from "@/components/DNAProfile";
 import UnifiedMap from "@/components/UnifiedMap";
+import SpeedComparison from "@/components/SpeedComparison";
 import ShareCard from "@/components/ShareCard";
 import FamousReaderMatch from "@/components/FamousReaderMatch";
 import PredictBook from "@/components/PredictBook";
@@ -232,19 +233,22 @@ export default function AnalyzePage() {
       )}
 
       {battle ? (
-        <UnifiedMap
-          mapData={mapData}
-          mapError={mapError}
-          battle={{ ...battle, ...(judgeData ?? {}) }}
-          libbyData={libbyData}
-          libbyError={libbyError}
-          library={input?.library ?? ""}
-          judgeLoading={judgeLoading}
-          judgeError={judgeError}
-          onRunJudge={runJudge}
-          onRetryMap={retryMap}
-          onRetryLibby={retryLibby}
-        />
+        <>
+          <SpeedComparison battle={battle} />
+          <UnifiedMap
+            mapData={mapData}
+            mapError={mapError}
+            battle={{ ...battle, ...(judgeData ?? {}) }}
+            libbyData={libbyData}
+            libbyError={libbyError}
+            library={input?.library ?? ""}
+            judgeLoading={judgeLoading}
+            judgeError={judgeError}
+            onRunJudge={runJudge}
+            onRetryMap={retryMap}
+            onRetryLibby={retryLibby}
+          />
+        </>
       ) : dna ? (
         <LoadingCard
           label={phase === "battle" ? "Running AI model battle — models are selecting books for you…" : "Preparing your recommendations…"}

@@ -408,6 +408,14 @@ class BattleModelInfo(BaseModel):
     total_params: str = Field(..., min_length=1, max_length=100)
     active_params: str = Field(..., min_length=1, max_length=100)
     task_fit: str = Field(..., min_length=1, max_length=100)
+    # Optional model-family / provider grouping metadata. Present on results
+    # the backend emits (so the frontend can group an equivalent family's
+    # entries into one cross-provider comparison) and therefore must be
+    # accepted when the frontend echoes battle_results back to /judge.
+    family: str | None = Field(None, min_length=1, max_length=100)
+    family_display: str | None = Field(None, min_length=1, max_length=100)
+    provider: str | None = Field(None, min_length=1, max_length=100)
+    provider_display: str | None = Field(None, min_length=1, max_length=100)
 
 
 class BattleModelPayload(BaseModel):
@@ -429,10 +437,19 @@ class BattleResultsPayload(BaseModel):
 
     @field_validator("models")
     @classmethod
-    def _exact_models(cls, v: dict[str, BattleModelPayload]) -> dict[str, BattleModelPayload]:
-        expected = {"GPT-OSS 120B", "GLM 4.7"}
-        if set(v) != expected:
-            raise ValueError(f"models must contain exactly {sorted(expected)}")
+    def _known_models(cls, v: dict[str, BattleModelPayload]) -> dict[str, BattleModelPayload]:
+        # The battle is N-way across whichever providers are configured, so
+        # the set of models is not a fixed pair. Require a non-empty payload
+        # whose keys are all recognized model displays (from the provider
+        # registry) — this rejects fabricated/unknown model names without
+        # hardcoding a specific roster.
+        from providers import KNOWN_MODEL_DISPLAYS
+
+        if not v:
+            raise ValueError("models must contain at least one model")
+        unknown = sorted(set(v) - KNOWN_MODEL_DISPLAYS)
+        if unknown:
+            raise ValueError(f"models contains unknown model name(s): {unknown}")
         return v
 
 

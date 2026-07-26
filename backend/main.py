@@ -276,7 +276,17 @@ async def predict(req: PredictRequest, request: Request):
 @app.get("/health")
 def health():
     """Non-secret readiness indicators only — never return the key itself."""
+    from providers import available_battle_models, display_for_model, provider_configured
+
     return {
         "status": "ok",
         "cerebras_configured": bool(CEREBRAS_API_KEY),
+        "providers_configured": {
+            "cerebras": provider_configured("cerebras"),
+            "groq": provider_configured("groq"),
+            "openrouter": provider_configured("openrouter"),
+        },
+        # The models that will actually compete in the battle given the
+        # currently-configured provider keys (display names only, no secrets).
+        "battle_models": [display_for_model(m) for m in available_battle_models()],
     }

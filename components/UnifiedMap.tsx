@@ -31,6 +31,10 @@ const CONSENSUS_COLOR = "#5a8a5a";
 function colorForModel(name: string, index = 0): string {
   if (name.includes("GPT")) return "#4a8c7e";
   if (name.includes("GLM")) return "#9b7040";
+  // Stable, index-independent colors for the free-tier providers so a model's
+  // map dots and its stats card always share the same color.
+  if (name.includes("Groq")) return "#7a6a8c";
+  if (name.includes("OpenRouter")) return "#b06040";
   return COLORS[index % COLORS.length];
 }
 

@@ -32,13 +32,26 @@ DNA = {
 def _battle_results_with(gpt_recs, glm_recs):
     return {
         "models": {
-            "GPT-OSS 120B": {"recommendations": gpt_recs, "meta": {}, "info": {}},
-            "GLM 4.7": {"recommendations": glm_recs, "meta": {}, "info": {}},
+            "GPT-OSS 120B · Cerebras": {"recommendations": gpt_recs, "meta": {}, "info": {}},
+            "GLM 4.7 · Cerebras": {"recommendations": glm_recs, "meta": {}, "info": {}},
         }
     }
 
 
 class RunBattleErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # run_battle now selects competitors by which provider keys are
+        # configured; the test environment has none. Pin the roster to the
+        # two default Cerebras models so these tests exercise run_battle's
+        # per-model aggregation/error handling deterministically.
+        patcher = mock.patch.object(
+            llm_battle,
+            "available_battle_models",
+            return_value=["gpt-oss-120b", "zai-glm-4.7"],
+        )
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     @staticmethod
     async def _fake_lookup_no_match(*, isbn=None, title=None, author=None, timeout=None):
         # ISBN enrichment runs on every non-empty rec set produced by
@@ -60,9 +73,9 @@ class RunBattleErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
              mock.patch.object(llm_battle, "lookup_open_library", side_effect=self._fake_lookup_no_match):
             result = await llm_battle.run_battle(DNA, books=[])
 
-        self.assertIn("error", result["models"]["GPT-OSS 120B"])
-        self.assertNotIn("error", result["models"]["GLM 4.7"])
-        self.assertEqual(len(result["models"]["GLM 4.7"]["recommendations"]), 1)
+        self.assertIn("error", result["models"]["GPT-OSS 120B · Cerebras"])
+        self.assertNotIn("error", result["models"]["GLM 4.7 · Cerebras"])
+        self.assertEqual(len(result["models"]["GLM 4.7 · Cerebras"]["recommendations"]), 1)
 
     async def test_cancelled_error_from_one_model_propagates_not_swallowed(self):
         async def fake_call_model(model, prompt, retries=3):
@@ -85,8 +98,8 @@ class RunBattleErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
             result = await llm_battle.run_battle(DNA, books=[])
 
         self.assertTrue(len(result["warnings"]) >= 2)
-        self.assertTrue(any("GPT-OSS 120B" in w for w in result["warnings"]))
-        self.assertTrue(any("GLM 4.7" in w for w in result["warnings"]))
+        self.assertTrue(any("GPT-OSS 120B · Cerebras" in w for w in result["warnings"]))
+        self.assertTrue(any("GLM 4.7 · Cerebras" in w for w in result["warnings"]))
 
     async def test_malformed_recommendations_container_is_isolated(self):
         async def fake_call_model(model, prompt, retries=3):
@@ -101,8 +114,8 @@ class RunBattleErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
              mock.patch.object(llm_battle, "lookup_open_library", side_effect=self._fake_lookup_no_match):
             result = await llm_battle.run_battle(DNA, books=[])
 
-        self.assertIn("error", result["models"]["GPT-OSS 120B"])
-        self.assertEqual(len(result["models"]["GLM 4.7"]["recommendations"]), 1)
+        self.assertIn("error", result["models"]["GPT-OSS 120B · Cerebras"])
+        self.assertEqual(len(result["models"]["GLM 4.7 · Cerebras"]["recommendations"]), 1)
 
     async def test_battle_errors_are_bounded_to_judge_schema(self):
         async def fake_call_model(model, prompt, retries=3):
@@ -118,7 +131,7 @@ class RunBattleErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
             result = await llm_battle.run_battle(DNA, books=[])
 
         self.assertLessEqual(
-            len(result["models"]["GPT-OSS 120B"]["error"]),
+            len(result["models"]["GPT-OSS 120B · Cerebras"]["error"]),
             llm_battle.MODEL_ERROR_MAX_CHARS,
         )
         BattleResultsPayload.model_validate(result)
@@ -163,7 +176,7 @@ class RunJudgeErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
             [],
             [{"title": "B", "author": "BB", "why": "w"}],
         )
-        battle_results["models"]["GPT-OSS 120B"]["error"] = "upstream model unavailable"
+        battle_results["models"]["GPT-OSS 120B · Cerebras"]["error"] = "upstream model unavailable"
         calls = {"count": 0}
 
         async def fake_judge(prompt, model="qwen2.5:7b", timeout=None):
@@ -174,8 +187,8 @@ class RunJudgeErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
             result = await llm_battle.run_judge(DNA, battle_results)
 
         self.assertEqual(calls["count"], 1)
-        self.assertIn("error", result["judge"]["GPT-OSS 120B"])
-        self.assertNotIn("error", result["judge"]["GLM 4.7"])
+        self.assertIn("error", result["judge"]["GPT-OSS 120B · Cerebras"])
+        self.assertNotIn("error", result["judge"]["GLM 4.7 · Cerebras"])
         self.assertIsNone(result["winner"])
         self.assertFalse(result["tie"])
 

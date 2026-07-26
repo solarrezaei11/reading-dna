@@ -93,7 +93,7 @@ class StrictModelTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             PredictRequest.model_validate({"title": "Book", "dna_profile": {}})
 
-    def test_judge_battle_payload_accepts_only_the_two_typed_models(self):
+    def test_judge_battle_payload_accepts_known_models_and_rejects_unknown(self):
         def model_payload(display):
             return {
                 "recommendations": [{"title": f"{display} Book", "author": "Author"}],
@@ -108,22 +108,28 @@ class StrictModelTests(unittest.TestCase):
                 },
             }
 
-        payload = {
-            "models": {
-                "GPT-OSS 120B": model_payload("GPT-OSS 120B"),
-                "GLM 4.7": model_payload("GLM 4.7"),
-            }
-        }
-        validated = BattleResultsPayload.model_validate(payload)
-        self.assertEqual(set(validated.models), {"GPT-OSS 120B", "GLM 4.7"})
+        from providers import KNOWN_MODEL_DISPLAYS
 
-        malformed = {
-            **payload,
-            "models": {
-                **payload["models"],
-                "GPT-OSS 120B": [],
-            },
-        }
+        # N-way: any subset of registered provider models is accepted, not a
+        # fixed pair — including the Groq/OpenRouter free-tier competitors.
+        known = sorted(KNOWN_MODEL_DISPLAYS)
+        self.assertGreaterEqual(len(known), 3)
+        payload = {"models": {display: model_payload(display) for display in known}}
+        validated = BattleResultsPayload.model_validate(payload)
+        self.assertEqual(set(validated.models), set(known))
+
+        # An unknown/fabricated model name is rejected outright.
+        with self.assertRaises(ValidationError):
+            BattleResultsPayload.model_validate(
+                {"models": {"Totally Made Up Model": model_payload("Totally Made Up Model")}}
+            )
+
+        # An empty roster is rejected.
+        with self.assertRaises(ValidationError):
+            BattleResultsPayload.model_validate({"models": {}})
+
+        # A structurally-invalid payload for a known model still fails.
+        malformed = {"models": {**payload["models"], known[0]: []}}
         with self.assertRaises(ValidationError):
             BattleResultsPayload.model_validate(malformed)
 
