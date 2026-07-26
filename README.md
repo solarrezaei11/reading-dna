@@ -44,6 +44,12 @@ ground truth.
      unverified values are omitted instead of being trusted.
    - A failure from one model does not discard a valid result from the others.
 
+<p align="center">
+  <img src="public/screenshots/08_recommendations_covers.png" alt="Recommendation cards with real book cover art, model attribution, and per-model reasoning" width="90%" />
+  <br />
+  <em>Each recommendation arrives with real cover art, the model (and provider) that picked it, comfort-zone and hidden-gem tags, and per-model reasoning.</em>
+</p>
+
 4. **Builds the Reading Universe map**
    - `all-MiniLM-L6-v2` creates local semantic embeddings.
    - KMeans clusters normalized book embeddings.
@@ -52,6 +58,12 @@ ground truth.
      adding recommendations does not refit and move the original books.
    - If AI cluster naming fails, the map remains usable with fallback labels
      and a warning.
+
+<p align="center">
+  <img src="public/screenshots/07_reading_universe_map.png" alt="Reading Universe map: a galaxy of genre clusters with each book plotted as a star" width="90%" />
+  <br />
+  <em>The Reading Universe: genre clusters bloom into a galaxy, every book a star sized by rating and recommendations marked as diamonds.</em>
+</p>
 
 5. **Checks library availability**
    - Library names, Libby URLs, and OverDrive keys are resolved to the
