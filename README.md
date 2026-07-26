@@ -1,8 +1,9 @@
 # ReadingDNA
 
 ReadingDNA imports a Goodreads reading history, builds an AI-assisted taste
-profile, asks two models for recommendations, and places the results in the
-same semantic map as the reader's books.
+profile, runs a multi-provider recommendation battle across several models (the
+same model can compete on multiple inference providers), and places the results
+in the same semantic map as the reader's books.
 
 It is an evaluation-oriented product demo, not a controlled model benchmark.
 The app exposes observed latency and an optional local judge, but it does not
@@ -69,18 +70,38 @@ ground truth.
 
 ## Models and latency metrics
 
-| Model | Provider | Notes |
-|---|---|---|
-| `gpt-oss-120b` | Cerebras | Mixture-of-experts model, approximately 117B total parameters and 5.1B active parameters |
-| `zai-glm-4.7` | Cerebras | Cerebras-hosted GLM recommendation model |
-| `llama-3.3-70b-versatile` | Groq (free tier) | Opt-in via `GROQ_API_KEY`; override with `GROQ_BATTLE_MODEL` |
-| `meta-llama/llama-3.3-70b-instruct:free` | OpenRouter (free tier) | Opt-in via `OPENROUTER_API_KEY`; override with `OPENROUTER_BATTLE_MODEL` |
-| `qwen2.5:7b` | Ollama (local) | Optional local judge |
+Every model whose provider key is configured competes in the same N-way
+battle. Models are organized by **family** so the *same* model can run on
+multiple providers — isolating the inference stack rather than the weights.
 
-Groq and OpenRouter are OpenAI-compatible and are streamed over `httpx`, so no
-additional SDK is required. Free-tier model availability rotates over time; if a
-default model ID is retired, set `GROQ_BATTLE_MODEL` / `OPENROUTER_BATTLE_MODEL`
-to a currently-available free model without changing code.
+| Family | Provider | API model | Cross-provider pair? |
+|---|---|---|---|
+| GPT-OSS 120B | Cerebras | `gpt-oss-120b` | ✅ with Groq |
+| GPT-OSS 120B | Groq (free tier) | `openai/gpt-oss-120b` | ✅ with Cerebras |
+| GLM 4.7 | Cerebras | `zai-glm-4.7` | — (Cerebras-only) |
+| Gemma 4 31B | Cerebras | `gemma-4-31b` | ✅ with OpenRouter |
+| Gemma 4 31B | OpenRouter (free tier) | `google/gemma-4-31b-it:free` | ✅ with Cerebras |
+| `qwen2.5:7b` | Ollama (local) | — | optional local judge |
+
+Groq is opt-in via `GROQ_API_KEY` and OpenRouter via `OPENROUTER_API_KEY`;
+both are OpenAI-compatible and streamed over `httpx`, so no extra SDK is
+required. When both a family's providers are configured, the frontend renders
+them side by side so you can compare identical weights across serving stacks.
+
+<p align="center">
+  <img src="public/screenshots/06_speed_comparison.png" alt="Multi-provider inference speed comparison with equivalent-model cross-provider groupings" width="90%" />
+</p>
+
+*Live run on [Emily May's](https://www.goodreads.com/user/show/4622890-emily-may)
+public Goodreads profile. GPT-OSS 120B runs on both Cerebras and Groq (same
+weights, different silicon). GLM 4.7 has an ~8K context window and returns
+`ContextLimitReached` on very large libraries; free-tier providers may return a
+transient rate-limit error — a failure from one model never discards the
+others' results.*
+
+Free-tier model availability rotates over time. Per-entry token caps keep
+providers with tight free-tier limits (e.g. Groq's 8K TPM for GPT-OSS 120B)
+under budget.
 
 For streamed model calls:
 

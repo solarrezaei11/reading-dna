@@ -172,9 +172,11 @@ _ROSTER: list[dict] = [
         family="gpt-oss-120b", family_display="GPT-OSS 120B",
         description=_GPT_OSS_120B_DESC,
         architecture="MoE", total_params="117B", active_params="5.1B", task_fit="reasoning",
-        # Groq's free-tier TPM for gpt-oss-120b is 8000; keep prompt + output
-        # comfortably under it (gpt-oss produces ~1.5k tokens for this task).
-        max_tokens=5000,
+        # Groq's free-tier TPM for gpt-oss-120b is 8000 and it counts
+        # input + max_tokens against that budget *before* generating. The
+        # battle prompt runs ~5k input tokens for a large library, and the
+        # model only emits ~1.7k for this task, so cap well under the balance.
+        max_tokens=2500,
     ),
     _entry(
         provider="openrouter", api_model="google/gemma-4-31b-it:free",

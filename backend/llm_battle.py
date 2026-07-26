@@ -45,6 +45,15 @@ from sampling import build_representative_sample, format_book_line
 
 logger = logging.getLogger(__name__)
 
+
+class ContextLimitReached(ValueError):
+    """Raised when a model fills its output/context budget before emitting any
+    answer (finish_reason=length, no content). Subclasses ValueError so the
+    existing retry/error handling treats it identically, while its class name
+    gives the UI a clearer diagnostic than a bare "ValueError" (error summaries
+    intentionally expose only the exception type, never its message)."""
+
+
 # Canonical rubric — these keys are used BOTH for the human-readable rubric
 # returned from /battle AND as the exact score keys the judge model must
 # return, so display and grading can never silently diverge.
@@ -73,6 +82,12 @@ MODEL_ERROR_MAX_CHARS = 1000
 JUDGE_SCORE_TIE_EPSILON = 0.05
 
 BATTLE_SAMPLE_TARGET = 80
+# Exclusion hints (DNF / currently-reading / TBR) are only advisory in the
+# prompt — read/DNF/currently-reading picks are hard-filtered downstream
+# regardless — so cap the injected title lists to keep the prompt bounded for
+# readers with very large shelves (an unbounded DNF list can otherwise blow
+# past a provider's per-request token budget).
+BATTLE_EXCLUSION_TITLE_CAP = 40
 BATTLE_REVIEW_EXCERPT_CHARS = min(200, MAX_REVIEW_EXCERPT_CHARS)
 
 _TITLE_ARTICLES_RE = re.compile(r"^(the|a|an)\s+")
@@ -384,8 +399,8 @@ def build_battle_prompt(
     sample = build_representative_sample(books, BATTLE_SAMPLE_TARGET)
     read_lines = "\n".join(format_book_line(b, BATTLE_REVIEW_EXCERPT_CHARS) for b in sample)
 
-    dnf_titles = [sanitize_for_prompt(b.get("title", "")) for b in dnf]
-    cr_titles = [sanitize_for_prompt(b.get("title", "")) for b in currently_reading]
+    dnf_titles = [sanitize_for_prompt(b.get("title", "")) for b in dnf][:BATTLE_EXCLUSION_TITLE_CAP]
+    cr_titles = [sanitize_for_prompt(b.get("title", "")) for b in currently_reading][:BATTLE_EXCLUSION_TITLE_CAP]
     tbr_titles = [sanitize_for_prompt(b.get("title", "")) for b in want_to_read]
 
     dnf_note = f"\nBooks they started but did NOT finish (do NOT recommend these — something didn't click):\n{', '.join(dnf_titles)}" if dnf_titles else ""
@@ -712,6 +727,16 @@ async def _call_model_once(model: str, prompt: str, system_prompt: str = "") -> 
             "%s returned an empty response (finish_reason=%s, chunks=%d)",
             model, state["finish_reason"], len(state["chunks"]),
         )
+        if state["finish_reason"] == "length":
+            # The model consumed its entire output/context budget before
+            # emitting any answer — typical of a reasoning model whose
+            # thinking phase fills a small context window on a large prompt
+            # (e.g. GLM 4.7's 8K window on a big library). The exception's
+            # *class name* is the diagnostic surfaced to the UI, since
+            # safe_exception_summary deliberately drops message text.
+            raise ContextLimitReached(
+                f"{model} exhausted its context before answering"
+            )
         raise ValueError(f"{model} returned an empty response (finish_reason={state['finish_reason']})")
     # Strip markdown fences
     if text.startswith("```"):
